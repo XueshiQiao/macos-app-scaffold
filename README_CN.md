@@ -2,9 +2,47 @@
 
 [English](README.md) | [日本語](README_JA.md) | [Deutsch](README_DE.md)
 
-用于创建和增强生产级 macOS 应用的 Claude Code 插件。
+用于创建和增强生产级 macOS 应用的 AI Agent Skill。支持 Claude Code、Cursor、Codex、Gemini 等 40+ AI 编程助手。
 
 从多个已上架的 macOS 应用中提取的真实模式，涵盖 XcodeGen、GitHub Actions、SwiftUI 和 Apple 公证。
+
+## 支持的能力
+
+所有功能均为交互式 — 按需选择，无需全选。
+
+**项目初始化**
+- 从零创建新的 macOS 应用（菜单栏 / 窗口 / 混合模式）
+- XcodeGen（`project.yml`）作为唯一配置源
+- 开箱即用的 SwiftUI 启动代码
+- Git 初始化 + 标准 `.gitignore`
+- `AGENTS.md` + `CLAUDE.md` 符号链接，支持多 Agent 工作流
+
+**构建与分发**
+- GitHub Actions CI/CD（构建、签名、公证、DMG、发布）
+- 通用二进制（arm64 + x86_64）
+- 代码签名 & Apple 公证（可选 — 没有 Apple 开发者账号也能用）
+- 推送 `v*` 标签自动创建 GitHub Release
+- 多语言 Release Notes（英文、中文、日语、德语等）
+- Homebrew Cask 公式
+
+**应用功能**
+- 自动更新（GitHub API 轮询 或 Sparkle）
+- 开机自启（`SMAppService`）
+- 辅助功能权限引导
+- 设置 / 偏好设置窗口
+- 文件日志（`~/Library/Logs/<AppName>.log`）
+- 本地化（多语言）
+- 分析（Aptabase，隐私友好）
+- 引导页 / 欢迎窗口
+
+**代码质量**
+- SwiftLint 配置（合理的默认规则）
+- 单元测试 Target（XCTest）
+- App Sandbox 开关（附 App Store 上架说明）
+
+**许可证与文档**
+- LICENSE 文件（MIT / GPL-3.0 / Apache-2.0）
+- README.md 带徽章（构建状态、macOS 版本、许可证）
 
 ## 快速开始
 
@@ -31,15 +69,7 @@
 
 ### `/macos-app-scaffold-new` — 创建新项目
 
-交互式向导，生成完整的 macOS 应用项目：
-
-- **应用类型**：菜单栏应用、窗口应用、或混合模式
-- **XcodeGen**（`project.yml`）作为唯一配置源
-- **GitHub Actions CI/CD**：构建、签名、公证、DMG、发布
-- **通用二进制**：arm64 + x86_64
-- **自动更新**：GitHub API 轮询 或 Sparkle
-- **SwiftUI 启动代码**：根据所选类型生成可编译的应用
-- **更多功能**：SwiftLint、单元测试、开机自启、辅助功能权限、本地化、文件日志、设置窗口、分析、引导页、Homebrew Cask、LICENSE、README
+交互式向导，引导你完成应用名称、类型、功能和 CI/CD 选项，然后一键生成所有文件。
 
 ```
 /macos-app-scaffold-new MyApp me.xueshi.myapp

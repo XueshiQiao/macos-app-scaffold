@@ -2,9 +2,47 @@
 
 [中文](README_CN.md) | [日本語](README_JA.md) | [Deutsch](README_DE.md)
 
-Claude Code plugin for scaffolding and enhancing production-ready macOS apps.
+AI agent skill for scaffolding and enhancing production-ready macOS apps. Works with Claude Code, Cursor, Codex, Gemini, and 40+ other agents.
 
 Extracted from real-world patterns across multiple shipped macOS apps using XcodeGen, GitHub Actions, SwiftUI, and Apple notarization.
+
+## What It Can Do
+
+All features are interactive — you pick what you need, skip what you don't.
+
+**Project Setup**
+- Create a new macOS app from scratch (Menu Bar / Windowed / Hybrid)
+- XcodeGen (`project.yml`) as single source of truth
+- Runnable SwiftUI starter code that compiles out of the box
+- Git init with proper `.gitignore`
+- `AGENTS.md` + `CLAUDE.md` symlink for multi-agent workflows
+
+**Build & Distribution**
+- GitHub Actions CI/CD (build, sign, notarize, DMG, release)
+- Universal binary (arm64 + x86_64)
+- Code signing & Apple notarization (optional — works without Apple Developer Account too)
+- Auto-create GitHub Release on `v*` tags
+- Release notes in multiple languages (English, Chinese, Japanese, German, etc.)
+- Homebrew Cask formula
+
+**App Features**
+- Auto-update (GitHub API polling or Sparkle)
+- Launch at Login (`SMAppService`)
+- Accessibility permission gate
+- Settings / Preferences window
+- File-based logging (`~/Library/Logs/<AppName>.log`)
+- Localization (multi-language)
+- Analytics (Aptabase, privacy-respecting)
+- Onboarding / Welcome window
+
+**Code Quality**
+- SwiftLint config with sensible defaults
+- Unit test target (XCTest)
+- App Sandbox toggle (with App Store trade-off explanation)
+
+**License & Docs**
+- LICENSE file (MIT / GPL-3.0 / Apache-2.0)
+- README.md with badges (build status, macOS version, license)
 
 ## Quick Start
 
@@ -31,15 +69,7 @@ Detects your context and asks:
 
 ### `/macos-app-scaffold-new` — Create a new project
 
-Interactive wizard that generates a complete macOS app project:
-
-- **App archetypes**: Menu bar, Windowed, or Hybrid
-- **XcodeGen** (`project.yml`) as single source of truth
-- **GitHub Actions CI/CD**: build, sign, notarize, DMG, release
-- **Universal binary**: arm64 + x86_64
-- **Auto-update**: GitHub API polling or Sparkle
-- **SwiftUI starter code**: compilable app with the archetype you chose
-- **And more**: SwiftLint, unit tests, Launch at Login, Accessibility permission gate, localization, file-based logging, Settings window, analytics, onboarding, Homebrew Cask, LICENSE, README
+Interactive wizard that walks you through app name, archetype, features, and CI/CD options, then generates everything.
 
 ```
 /macos-app-scaffold-new MyApp me.xueshi.myapp

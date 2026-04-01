@@ -2,9 +2,47 @@
 
 [English](README.md) | [中文](README_CN.md) | [Deutsch](README_DE.md)
 
-本番レベルの macOS アプリを作成・拡張するための Claude Code プラグイン。
+本番レベルの macOS アプリを作成・拡張するための AI Agent Skill。Claude Code、Cursor、Codex、Gemini など 40 以上のエージェントに対応。
 
 XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリリース済みの複数の macOS アプリから抽出されたパターンです。
+
+## サポート機能
+
+すべての機能はインタラクティブ — 必要なものだけ選択できます。
+
+**プロジェクトセットアップ**
+- 新しい macOS アプリをゼロから作成（メニューバー / ウィンドウ / ハイブリッド）
+- XcodeGen（`project.yml`）を唯一の設定ソースとして使用
+- そのままコンパイルできる SwiftUI スターターコード
+- Git 初期化 + 適切な `.gitignore`
+- `AGENTS.md` + `CLAUDE.md` シンボリックリンク（マルチエージェントワークフロー対応）
+
+**ビルド & 配布**
+- GitHub Actions CI/CD（ビルド、署名、公証、DMG、リリース）
+- ユニバーサルバイナリ（arm64 + x86_64）
+- コード署名 & Apple 公証（オプション — Apple 開発者アカウントなしでも動作）
+- `v*` タグで GitHub Release を自動作成
+- 多言語リリースノート（英語、中国語、日本語、ドイツ語など）
+- Homebrew Cask フォーミュラ
+
+**アプリ機能**
+- 自動更新（GitHub API ポーリング または Sparkle）
+- ログイン時起動（`SMAppService`）
+- アクセシビリティ権限ゲート
+- 設定 / 環境設定ウィンドウ
+- ファイルベースのログ（`~/Library/Logs/<AppName>.log`）
+- ローカライズ（多言語）
+- アナリティクス（Aptabase、プライバシー配慮）
+- オンボーディング / ウェルカムウィンドウ
+
+**コード品質**
+- SwiftLint 設定（合理的なデフォルトルール）
+- ユニットテストターゲット（XCTest）
+- App Sandbox トグル（App Store のトレードオフ説明付き）
+
+**ライセンス & ドキュメント**
+- LICENSE ファイル（MIT / GPL-3.0 / Apache-2.0）
+- README.md（ビルドステータス、macOS バージョン、ライセンスのバッジ付き）
 
 ## クイックスタート
 
@@ -31,15 +69,7 @@ XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリ
 
 ### `/macos-app-scaffold-new` — 新規プロジェクト作成
 
-完全な macOS アプリプロジェクトを生成するインタラクティブウィザード：
-
-- **アプリタイプ**：メニューバー、ウィンドウ、またはハイブリッド
-- **XcodeGen**（`project.yml`）を唯一の設定ソースとして使用
-- **GitHub Actions CI/CD**：ビルド、署名、公証、DMG、リリース
-- **ユニバーサルバイナリ**：arm64 + x86_64
-- **自動更新**：GitHub API ポーリング または Sparkle
-- **SwiftUI スターターコード**：選択したタイプに基づくコンパイル可能なアプリ
-- **その他**：SwiftLint、ユニットテスト、ログイン時起動、アクセシビリティ権限、ローカライズ、ファイルログ、設定ウィンドウ、アナリティクス、オンボーディング、Homebrew Cask、LICENSE、README
+アプリ名、タイプ、機能、CI/CD オプションを対話的に選択し、すべてのファイルを一括生成します。
 
 ```
 /macos-app-scaffold-new MyApp me.xueshi.myapp

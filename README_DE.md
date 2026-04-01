@@ -2,9 +2,47 @@
 
 [English](README.md) | [中文](README_CN.md) | [日本語](README_JA.md)
 
-Claude Code Plugin zum Erstellen und Erweitern produktionsreifer macOS-Apps.
+AI Agent Skill zum Erstellen und Erweitern produktionsreifer macOS-Apps. Funktioniert mit Claude Code, Cursor, Codex, Gemini und 40+ weiteren Agents.
 
 Basierend auf realen Mustern aus mehreren veröffentlichten macOS-Apps mit XcodeGen, GitHub Actions, SwiftUI und Apple-Notarisierung.
+
+## Unterstützte Funktionen
+
+Alle Funktionen sind interaktiv — wähle, was du brauchst, überspringe den Rest.
+
+**Projekt-Setup**
+- Neue macOS-App von Grund auf erstellen (Menüleiste / Fenster / Hybrid)
+- XcodeGen (`project.yml`) als einzige Konfigurationsquelle
+- Sofort kompilierbarer SwiftUI Starter-Code
+- Git-Initialisierung mit korrekter `.gitignore`
+- `AGENTS.md` + `CLAUDE.md` Symlink für Multi-Agent-Workflows
+
+**Build & Distribution**
+- GitHub Actions CI/CD (Bauen, Signieren, Notarisieren, DMG, Release)
+- Universal Binary (arm64 + x86_64)
+- Code-Signierung & Apple-Notarisierung (optional — funktioniert auch ohne Apple-Entwicklerkonto)
+- Automatisch GitHub Release bei `v*` Tags
+- Mehrsprachige Release Notes (Englisch, Chinesisch, Japanisch, Deutsch usw.)
+- Homebrew Cask Formel
+
+**App-Funktionen**
+- Auto-Update (GitHub API Polling oder Sparkle)
+- Autostart (`SMAppService`)
+- Barrierefreiheits-Berechtigungsgate
+- Einstellungen / Preferences Fenster
+- Datei-basiertes Logging (`~/Library/Logs/<AppName>.log`)
+- Lokalisierung (mehrsprachig)
+- Analytics (Aptabase, datenschutzfreundlich)
+- Onboarding / Willkommensfenster
+
+**Code-Qualität**
+- SwiftLint Konfiguration (sinnvolle Standardregeln)
+- Unit-Test Target (XCTest)
+- App Sandbox Toggle (mit App Store Trade-off Erklärung)
+
+**Lizenz & Dokumentation**
+- LICENSE Datei (MIT / GPL-3.0 / Apache-2.0)
+- README.md mit Badges (Build-Status, macOS-Version, Lizenz)
 
 ## Schnellstart
 
@@ -31,15 +69,7 @@ Erkennt deinen Kontext und fragt:
 
 ### `/macos-app-scaffold-new` — Neues Projekt erstellen
 
-Interaktiver Assistent, der ein vollständiges macOS-App-Projekt generiert:
-
-- **App-Typen**: Menüleiste, Fenster oder Hybrid
-- **XcodeGen** (`project.yml`) als einzige Konfigurationsquelle
-- **GitHub Actions CI/CD**: Bauen, Signieren, Notarisieren, DMG, Release
-- **Universal Binary**: arm64 + x86_64
-- **Auto-Update**: GitHub API Polling oder Sparkle
-- **SwiftUI Starter-Code**: kompilierbares App basierend auf dem gewählten Typ
-- **Und mehr**: SwiftLint, Unit-Tests, Autostart, Barrierefreiheits-Berechtigung, Lokalisierung, Datei-Logging, Einstellungsfenster, Analytics, Onboarding, Homebrew Cask, LICENSE, README
+Interaktiver Assistent, der dich durch App-Name, Typ, Funktionen und CI/CD-Optionen führt und dann alles generiert.
 
 ```
 /macos-app-scaffold-new MyApp me.xueshi.myapp
