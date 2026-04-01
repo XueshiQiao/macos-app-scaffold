@@ -1,0 +1,7 @@
+{
+  "name": "macos-app-scaffold",
+  "version": "1.0.0",
+  "description": "Scaffold and enhance production-ready macOS apps with XcodeGen, GitHub Actions CI/CD, code signing, notarization, auto-update, and SwiftUI starter code",
+  "author": "XueshiQiao",
+  "homepage": "https://github.com/XueshiQiao/macos-app-scaffold"
+}
