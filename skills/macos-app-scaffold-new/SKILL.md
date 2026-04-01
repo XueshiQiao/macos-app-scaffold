@@ -700,54 +700,65 @@ jobs:
           P12_BASE64: ${{"{{"}} secrets.MAC_CERTS_P12_BASE64 {{"}}"}}
           P12_PASSWORD: ${{"{{"}} secrets.MAC_CERTS_P12_PASSWORD {{"}}"}}
         run: |
-          echo "$P12_BASE64" | base64 --decode > certificate.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(uuidgen)
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import certificate.p12 -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-          rm certificate.p12
-
-      - name: Validate secrets
-        if: env.HAS_APPLE_SECRETS == 'true'
-        env:
-          APPLE_ID: ${{"{{"}} secrets.APPLE_ID {{"}}"}}
-          TEAM_ID: ${{"{{"}} secrets.APPLE_TEAM_ID {{"}}"}}
-          APP_PASSWORD: ${{"{{"}} secrets.APP_SPECIFIC_PASSWORD {{"}}"}}
-        run: |
-          missing=""
-          [[ -z "$APPLE_ID" ]] && missing="$missing APPLE_ID"
-          [[ -z "$TEAM_ID" ]] && missing="$missing APPLE_TEAM_ID"
-          [[ -z "$APP_PASSWORD" ]] && missing="$missing APP_SPECIFIC_PASSWORD"
-          if [[ -n "$missing" ]]; then
-            echo "::error::Missing required secrets:$missing"
+          if [[ -z "$P12_BASE64" || -z "$P12_PASSWORD" ]]; then
+            echo "::error::MAC_CERTS_P12_BASE64 and MAC_CERTS_P12_PASSWORD must both be set."
             exit 1
           fi
 
-      - name: Sign app
+          CERT_PATH="$RUNNER_TEMP/signing-cert.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          echo "$P12_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          rm -f "$CERT_PATH"
+
+      - name: Code sign app
         if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          SIGNING_IDENTITY: ${{"{{"}} secrets.SIGNING_IDENTITY || 'Developer ID Application' {{"}}"}}
         run: |
           APP_PATH="build/Release/$APP_NAME.app"
           ENTITLEMENTS="{{AppName}}/Resources/{{AppName}}.entitlements"
-          IDENTITY="Developer ID Application"
 
-          # Inside-out signing: sign embedded frameworks/bundles first, then main app.
-          # Apple discourages --deep as it doesn't guarantee correct signing order.
-          find "$APP_PATH/Contents/Frameworks" -depth \
-            \( -name "*.framework" -o -name "*.dylib" -o -name "*.xpc" -o -name "*.app" \) \
-            2>/dev/null | while read -r item; do
-            codesign --force --options runtime --sign "$IDENTITY" --timestamp "$item"
-          done
+          # Inside-out signing: sign embedded code deepest-first.
+          # Apple discourages --deep as it doesn't guarantee correct order.
+          if [ -d "$APP_PATH/Contents/Frameworks" ]; then
+            # 1. Sign every Mach-O binary individually
+            find "$APP_PATH/Contents/Frameworks" -type f | while read -r f; do
+              if file "$f" | grep -q "Mach-O"; then
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGNING_IDENTITY" "$f"
+              fi
+            done
+
+            # 2. Sign bundles inside-out: xpc -> app -> framework/dylib
+            find "$APP_PATH/Contents/Frameworks" -name "*.xpc" -type d | while read -r b; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$b"
+            done
+            find "$APP_PATH/Contents/Frameworks" -name "*.app" -type d | while read -r b; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$b"
+            done
+            find "$APP_PATH/Contents/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) | while read -r b; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$b"
+            done
+          fi
 
           # Sign main app bundle with entitlements
-          codesign --force --options runtime \
-            --sign "$IDENTITY" \
-            --timestamp \
+          codesign --force --options runtime --timestamp \
             --entitlements "$ENTITLEMENTS" \
-            "$APP_PATH"
+            --sign "$SIGNING_IDENTITY" "$APP_PATH"
+
+          # Verify
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
       - name: Notarize app
         if: env.HAS_APPLE_SECRETS == 'true'
@@ -756,6 +767,11 @@ jobs:
           TEAM_ID: ${{"{{"}} secrets.APPLE_TEAM_ID {{"}}"}}
           APP_PASSWORD: ${{"{{"}} secrets.APP_SPECIFIC_PASSWORD {{"}}"}}
         run: |
+          if [[ -z "$APPLE_ID" || -z "$APP_PASSWORD" || -z "$TEAM_ID" ]]; then
+            echo "::error::Missing notarization secrets (APPLE_ID, APP_SPECIFIC_PASSWORD, or APPLE_TEAM_ID)"
+            exit 1
+          fi
+
           ditto -c -k --keepParent "build/Release/$APP_NAME.app" "$RUNNER_TEMP/notarize.zip"
 
           SUBMISSION_OUT=$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
@@ -763,28 +779,24 @@ jobs:
             --team-id "$TEAM_ID" \
             --password "$APP_PASSWORD" \
             --wait 2>&1) || true
+          echo "$SUBMISSION_OUT"
 
           SUBMISSION_ID=$(echo "$SUBMISSION_OUT" | grep -m1 "^  id:" | awk '{print $NF}')
           STATUS=$(echo "$SUBMISSION_OUT" | grep "^  status:" | awk '{print $NF}')
 
           if [[ "$STATUS" != "Accepted" ]]; then
-            echo "::error::Notarization failed with status: $STATUS"
-            echo "$SUBMISSION_OUT"
+            echo "--- Notarization Log ---"
             if [[ -n "$SUBMISSION_ID" ]]; then
-              echo "--- Notarization Log ---"
               xcrun notarytool log "$SUBMISSION_ID" \
                 --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
                 --password "$APP_PASSWORD" 2>&1 || true
             fi
+            echo "::error::Notarization failed with status: $STATUS"
             exit 1
           fi
 
-          rm -f "$RUNNER_TEMP/notarize.zip"
-
-      - name: Staple app
-        if: env.HAS_APPLE_SECRETS == 'true'
-        run: |
           xcrun stapler staple "build/Release/$APP_NAME.app"
+          rm -f "$RUNNER_TEMP/notarize.zip"
 
       - name: Create DMG
         run: |
