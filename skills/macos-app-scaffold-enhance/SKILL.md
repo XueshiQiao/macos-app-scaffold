@@ -128,10 +128,67 @@ For GitHub API polling:
 - Show how to integrate in SettingsView or AppDelegate
 
 For Sparkle:
-- Add to `project.yml` packages section
-- Generate EdDSA key pair instructions
-- Add `SUFeedURL` to Info.plist properties
-- Show appcast.xml setup instructions
+- Add `Sparkle` (v2.9.0+) to `project.yml` packages section
+- Add `SUFeedURL` to Info.plist properties in `project.yml`
+- Generate `SPUStandardUpdaterController` setup in AppDelegate
+- Add "Check for Updates" menu item or Settings toggle
+
+**EdDSA key generation** — instruct the user to run locally:
+```bash
+# Download Sparkle, extract, then:
+./bin/generate_keys
+# This prints the public key (add to Info.plist as SUPublicEDKey)
+# and saves the private key to Keychain.
+# Export the private key and add as GitHub secret: SPARKLE_EDDSA_KEY
+```
+
+**CI/CD appcast generation** — add these steps to the existing `build.yml`:
+```yaml
+- name: Download Sparkle tools
+  if: env.HAS_APPLE_SECRETS == 'true'
+  run: |
+    SPARKLE_VERSION="2.9.0"
+    curl -sL -o "$RUNNER_TEMP/sparkle.tar.xz" \
+      "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz"
+    mkdir -p "$RUNNER_TEMP/sparkle"
+    tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+
+- name: Sign DMG and generate appcast
+  if: env.HAS_APPLE_SECRETS == 'true'
+  env:
+    SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+  run: |
+    echo -n "$SPARKLE_EDDSA_KEY" > "$RUNNER_TEMP/sparkle_eddsa.key"
+    SIGN_OUTPUT=$("$RUNNER_TEMP/sparkle/bin/sign_update" "$APP_NAME.dmg" -f "$RUNNER_TEMP/sparkle_eddsa.key")
+    rm -f "$RUNNER_TEMP/sparkle_eddsa.key"
+
+    ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+    VERSION=$(grep MARKETING_VERSION project.yml | head -1 | awk -F'"' '{print $2}')
+    BUILD=$(grep CURRENT_PROJECT_VERSION project.yml | head -1 | awk -F'"' '{print $2}')
+    FILE_LENGTH=$(stat -f%z "$APP_NAME.dmg")
+    TAG="${GITHUB_REF_NAME}"
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${APP_NAME}.dmg"
+
+    {
+      echo '<?xml version="1.0" encoding="utf-8"?>'
+      echo '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">'
+      echo '  <channel>'
+      echo "    <title>${APP_NAME} Updates</title>"
+      echo '    <item>'
+      echo "      <title>Version ${VERSION}</title>"
+      echo "      <sparkle:version>${BUILD}</sparkle:version>"
+      echo "      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>"
+      echo "      <enclosure url=\"${DOWNLOAD_URL}\" length=\"${FILE_LENGTH}\" type=\"application/octet-stream\" sparkle:edSignature=\"${ED_SIGNATURE}\" />"
+      echo '    </item>'
+      echo '  </channel>'
+      echo '</rss>'
+    } > appcast.xml
+```
+
+**Additional GitHub secrets for Sparkle:**
+- `SPARKLE_EDDSA_KEY` — EdDSA private key exported from `generate_keys`
+
+**Appcast hosting:** Upload `appcast.xml` alongside the DMG in the GitHub Release, or host it separately (e.g., GitHub Pages, S3). Set `SUFeedURL` in Info.plist to point to the hosted appcast.
 
 ### Feature: File-Based Logging
 

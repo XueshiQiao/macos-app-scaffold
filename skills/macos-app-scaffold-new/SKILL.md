@@ -711,14 +711,43 @@ jobs:
           security list-keychain -d user -s "$KEYCHAIN_PATH"
           rm certificate.p12
 
+      - name: Validate secrets
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          APPLE_ID: ${{"{{"}} secrets.APPLE_ID {{"}}"}}
+          TEAM_ID: ${{"{{"}} secrets.APPLE_TEAM_ID {{"}}"}}
+          APP_PASSWORD: ${{"{{"}} secrets.APP_SPECIFIC_PASSWORD {{"}}"}}
+        run: |
+          missing=""
+          [[ -z "$APPLE_ID" ]] && missing="$missing APPLE_ID"
+          [[ -z "$TEAM_ID" ]] && missing="$missing APPLE_TEAM_ID"
+          [[ -z "$APP_PASSWORD" ]] && missing="$missing APP_SPECIFIC_PASSWORD"
+          if [[ -n "$missing" ]]; then
+            echo "::error::Missing required secrets:$missing"
+            exit 1
+          fi
+
       - name: Sign app
         if: env.HAS_APPLE_SECRETS == 'true'
         run: |
-          codesign --force --deep --options runtime \
-            --sign "Developer ID Application" \
+          APP_PATH="build/Release/$APP_NAME.app"
+          ENTITLEMENTS="{{AppName}}/Resources/{{AppName}}.entitlements"
+          IDENTITY="Developer ID Application"
+
+          # Inside-out signing: sign embedded frameworks/bundles first, then main app.
+          # Apple discourages --deep as it doesn't guarantee correct signing order.
+          find "$APP_PATH/Contents/Frameworks" -depth \
+            \( -name "*.framework" -o -name "*.dylib" -o -name "*.xpc" -o -name "*.app" \) \
+            2>/dev/null | while read -r item; do
+            codesign --force --options runtime --sign "$IDENTITY" --timestamp "$item"
+          done
+
+          # Sign main app bundle with entitlements
+          codesign --force --options runtime \
+            --sign "$IDENTITY" \
             --timestamp \
-            --entitlements {{AppName}}/Resources/{{AppName}}.entitlements \
-            build/Release/$APP_NAME.app
+            --entitlements "$ENTITLEMENTS" \
+            "$APP_PATH"
 
       - name: Notarize app
         if: env.HAS_APPLE_SECRETS == 'true'
@@ -727,14 +756,30 @@ jobs:
           TEAM_ID: ${{"{{"}} secrets.APPLE_TEAM_ID {{"}}"}}
           APP_PASSWORD: ${{"{{"}} secrets.APP_SPECIFIC_PASSWORD {{"}}"}}
         run: |
-          cd build/Release
-          /usr/bin/ditto -c -k --keepParent "$APP_NAME.app" "$APP_NAME-app.zip"
-          xcrun notarytool submit "$APP_NAME-app.zip" \
+          ditto -c -k --keepParent "build/Release/$APP_NAME.app" "$RUNNER_TEMP/notarize.zip"
+
+          SUBMISSION_OUT=$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
             --apple-id "$APPLE_ID" \
             --team-id "$TEAM_ID" \
             --password "$APP_PASSWORD" \
-            --wait
-          rm "$APP_NAME-app.zip"
+            --wait 2>&1) || true
+
+          SUBMISSION_ID=$(echo "$SUBMISSION_OUT" | grep -m1 "^  id:" | awk '{print $NF}')
+          STATUS=$(echo "$SUBMISSION_OUT" | grep "^  status:" | awk '{print $NF}')
+
+          if [[ "$STATUS" != "Accepted" ]]; then
+            echo "::error::Notarization failed with status: $STATUS"
+            echo "$SUBMISSION_OUT"
+            if [[ -n "$SUBMISSION_ID" ]]; then
+              echo "--- Notarization Log ---"
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
+                --password "$APP_PASSWORD" 2>&1 || true
+            fi
+            exit 1
+          fi
+
+          rm -f "$RUNNER_TEMP/notarize.zip"
 
       - name: Staple app
         if: env.HAS_APPLE_SECRETS == 'true'
@@ -754,30 +799,6 @@ jobs:
             "$APP_NAME.dmg" \
             "build/Release/$APP_NAME.app" || true
           # create-dmg exits 2 on "DMG created but icon layout failed" which is OK
-
-      - name: Sign DMG
-        if: env.HAS_APPLE_SECRETS == 'true'
-        run: |
-          codesign --force --sign "Developer ID Application" --timestamp "$APP_NAME.dmg"
-
-      - name: Notarize DMG
-        if: env.HAS_APPLE_SECRETS == 'true'
-        env:
-          APPLE_ID: ${{"{{"}} secrets.APPLE_ID {{"}}"}}
-          TEAM_ID: ${{"{{"}} secrets.APPLE_TEAM_ID {{"}}"}}
-          APP_PASSWORD: ${{"{{"}} secrets.APP_SPECIFIC_PASSWORD {{"}}"}}
-        run: |
-          xcrun notarytool submit "$APP_NAME.dmg" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$TEAM_ID" \
-            --password "$APP_PASSWORD" \
-            --wait
-
-      - name: Staple DMG
-        if: env.HAS_APPLE_SECRETS == 'true'
-        continue-on-error: true
-        run: |
-          xcrun stapler staple "$APP_NAME.dmg"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
