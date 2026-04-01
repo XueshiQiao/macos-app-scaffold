@@ -714,11 +714,32 @@ jobs:
       - name: Sign app
         if: env.HAS_APPLE_SECRETS == 'true'
         run: |
-          codesign --force --options runtime \
+          codesign --force --deep --options runtime \
             --sign "Developer ID Application" \
             --timestamp \
             --entitlements {{AppName}}/Resources/{{AppName}}.entitlements \
             build/Release/$APP_NAME.app
+
+      - name: Notarize app
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          APPLE_ID: ${{"{{"}} secrets.APPLE_ID {{"}}"}}
+          TEAM_ID: ${{"{{"}} secrets.APPLE_TEAM_ID {{"}}"}}
+          APP_PASSWORD: ${{"{{"}} secrets.APP_SPECIFIC_PASSWORD {{"}}"}}
+        run: |
+          cd build/Release
+          /usr/bin/ditto -c -k --keepParent "$APP_NAME.app" "$APP_NAME-app.zip"
+          xcrun notarytool submit "$APP_NAME-app.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$TEAM_ID" \
+            --password "$APP_PASSWORD" \
+            --wait
+          rm "$APP_NAME-app.zip"
+
+      - name: Staple app
+        if: env.HAS_APPLE_SECRETS == 'true'
+        run: |
+          xcrun stapler staple "build/Release/$APP_NAME.app"
 
       - name: Create DMG
         run: |
@@ -752,8 +773,9 @@ jobs:
             --password "$APP_PASSWORD" \
             --wait
 
-      - name: Staple notarization ticket
+      - name: Staple DMG
         if: env.HAS_APPLE_SECRETS == 'true'
+        continue-on-error: true
         run: |
           xcrun stapler staple "$APP_NAME.dmg"
 
