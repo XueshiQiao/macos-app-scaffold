@@ -4,7 +4,28 @@ Claude Code plugin for scaffolding and enhancing production-ready macOS apps.
 
 Extracted from real-world patterns across multiple shipped macOS apps using XcodeGen, GitHub Actions, SwiftUI, and Apple notarization.
 
+## Quick Start
+
+```
+/macos-app
+```
+
+That's it. The skill auto-detects whether you're in an existing project or starting fresh, and routes you to the right workflow.
+
+You can also be explicit:
+
+```
+/macos-app new MyApp              # Create a new app
+/macos-app enhance                # Add features to current project
+```
+
 ## Skills
+
+### `/macos-app` — Entry point (auto-routes)
+
+Detects your context and asks:
+- **Existing project found** → offer to add features (CI/CD, auto-update, logging, etc.)
+- **No project found** → walk through new app creation wizard
 
 ### `/new-macos-app` — Create a new project
 
@@ -42,8 +63,9 @@ Analyzes your current project, shows what's already in place, and lets you surgi
 After installation, the skills are available as:
 
 ```
-/macos-app-scaffold:new-macos-app
-/macos-app-scaffold:enhance-macos-app
+/macos-app-scaffold:macos-app              # Entry point
+/macos-app-scaffold:new-macos-app          # Create new
+/macos-app-scaffold:enhance-macos-app      # Enhance existing
 ```
 
 ## What Gets Generated
