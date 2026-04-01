@@ -9,7 +9,7 @@ Basierend auf realen Mustern aus mehreren veröffentlichten macOS-Apps mit Xcode
 ## Schnellstart
 
 ```
-/macos-app
+/macos-app-scaffold
 ```
 
 Das ist alles. Der Skill erkennt automatisch, ob du dich in einem bestehenden Projekt befindest oder neu anfängst, und leitet dich zum passenden Workflow weiter.
@@ -17,19 +17,19 @@ Das ist alles. Der Skill erkennt automatisch, ob du dich in einem bestehenden Pr
 Du kannst auch explizit angeben:
 
 ```
-/macos-app new MyApp              # Neue App erstellen
-/macos-app enhance                # Funktionen zum aktuellen Projekt hinzufügen
+/macos-app-scaffold new MyApp              # Neue App erstellen
+/macos-app-scaffold enhance                # Funktionen zum aktuellen Projekt hinzufügen
 ```
 
 ## Skills
 
-### `/macos-app` — Einstiegspunkt (automatisches Routing)
+###  `/macos-app-scaffold` — Einstiegspunkt (automatisches Routing)
 
 Erkennt deinen Kontext und fragt:
 - **Bestehendes Projekt erkannt** → bietet an, Funktionen hinzuzufügen (CI/CD, Auto-Update, Logging usw.)
 - **Kein Projekt erkannt** → startet den Assistenten zur Erstellung einer neuen App
 
-### `/new-macos-app` — Neues Projekt erstellen
+### `/macos-app-scaffold-new` — Neues Projekt erstellen
 
 Interaktiver Assistent, der ein vollständiges macOS-App-Projekt generiert:
 
@@ -42,18 +42,18 @@ Interaktiver Assistent, der ein vollständiges macOS-App-Projekt generiert:
 - **Und mehr**: SwiftLint, Unit-Tests, Autostart, Barrierefreiheits-Berechtigung, Lokalisierung, Datei-Logging, Einstellungsfenster, Analytics, Onboarding, Homebrew Cask, LICENSE, README
 
 ```
-/new-macos-app MyApp me.xueshi.myapp
+/macos-app-scaffold-new MyApp me.xueshi.myapp
 ```
 
-### `/enhance-macos-app` — Funktionen zu bestehendem Projekt hinzufügen
+### `/macos-app-scaffold-enhance` — Funktionen zu bestehendem Projekt hinzufügen
 
 Analysiert dein aktuelles Projekt, zeigt vorhandene Funktionen an und lässt dich fehlende gezielt hinzufügen:
 
 ```
-/enhance-macos-app                  # Vollständige Analyse + Funktionen wählen
-/enhance-macos-app ci-cd            # CI/CD direkt hinzufügen
-/enhance-macos-app auto-update      # Auto-Update direkt hinzufügen
-/enhance-macos-app logging          # Datei-Logging direkt hinzufügen
+/macos-app-scaffold-enhance                  # Vollständige Analyse + Funktionen wählen
+/macos-app-scaffold-enhance ci-cd            # CI/CD direkt hinzufügen
+/macos-app-scaffold-enhance auto-update      # Auto-Update direkt hinzufügen
+/macos-app-scaffold-enhance logging          # Datei-Logging direkt hinzufügen
 ```
 
 ## Installation
@@ -80,9 +80,9 @@ cp -r macos-app-scaffold/skills/* ~/.claude/skills/
 Nach der Installation sind die Skills verfügbar als:
 
 ```
-/macos-app              # Einstiegspunkt (automatisches Routing)
-/new-macos-app          # Neu erstellen
-/enhance-macos-app      # Bestehendes erweitern
+/macos-app-scaffold              # Einstiegspunkt (automatisches Routing)
+/macos-app-scaffold-new          # Neu erstellen
+/macos-app-scaffold-enhance      # Bestehendes erweitern
 ```
 
 ## Generierte Dateistruktur

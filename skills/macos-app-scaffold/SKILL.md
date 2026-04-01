@@ -1,5 +1,5 @@
 ---
-name: macos-app
+name: macos-app-scaffold
 description: Scaffold a new macOS app or add features to an existing one. Auto-detects project context and routes accordingly.
 argument-hint: "[new|enhance] [AppName]"
 disable-model-invocation: false
@@ -62,14 +62,14 @@ What would you like to do?
 
 ### Step 3: Execute
 
-**For New App** → Follow the complete flow defined in `new-macos-app/SKILL.md`:
+**For New App** → Follow the complete flow defined in `macos-app-scaffold-new/SKILL.md`:
 1. Ask for app name + bundle ID (use argument if provided)
 2. App archetype (Menu Bar / Windowed / Both)
 3. Features checklist
 4. CI/CD & Distribution
 5. Generate everything
 
-**For Enhance** → Follow the complete flow defined in `enhance-macos-app/SKILL.md`:
+**For Enhance** → Follow the complete flow defined in `macos-app-scaffold-enhance/SKILL.md`:
 1. Analyze existing project
 2. Show status dashboard (what exists vs what can be added)
 3. Let user pick features
@@ -78,7 +78,7 @@ What would you like to do?
 ## Reference
 
 The full instructions for each flow are in sibling skill files:
-- [New App flow](../new-macos-app/SKILL.md)
-- [Enhance flow](../enhance-macos-app/SKILL.md)
+- [New App flow](../macos-app-scaffold-new/SKILL.md)
+- [Enhance flow](../macos-app-scaffold-enhance/SKILL.md)
 
 Read and follow those files completely when executing the chosen flow. Do not improvise — use the templates and patterns defined there.

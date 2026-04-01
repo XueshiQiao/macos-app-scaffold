@@ -9,7 +9,7 @@ XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリ
 ## クイックスタート
 
 ```
-/macos-app
+/macos-app-scaffold
 ```
 
 これだけです。Skill が既存プロジェクトの有無を自動検出し、適切なワークフローに誘導します。
@@ -17,19 +17,19 @@ XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリ
 明示的に指定することもできます：
 
 ```
-/macos-app new MyApp              # 新しいアプリを作成
-/macos-app enhance                # 既存プロジェクトに機能を追加
+/macos-app-scaffold new MyApp              # 新しいアプリを作成
+/macos-app-scaffold enhance                # 既存プロジェクトに機能を追加
 ```
 
 ## Skills
 
-### `/macos-app` — エントリーポイント（自動ルーティング）
+###  `/macos-app-scaffold` — エントリーポイント（自動ルーティング）
 
 コンテキストを検出して質問します：
 - **既存プロジェクトを検出** → 機能追加を提案（CI/CD、自動更新、ログなど）
 - **プロジェクトなし** → 新規アプリ作成ウィザードを開始
 
-### `/new-macos-app` — 新規プロジェクト作成
+### `/macos-app-scaffold-new` — 新規プロジェクト作成
 
 完全な macOS アプリプロジェクトを生成するインタラクティブウィザード：
 
@@ -42,18 +42,18 @@ XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリ
 - **その他**：SwiftLint、ユニットテスト、ログイン時起動、アクセシビリティ権限、ローカライズ、ファイルログ、設定ウィンドウ、アナリティクス、オンボーディング、Homebrew Cask、LICENSE、README
 
 ```
-/new-macos-app MyApp me.xueshi.myapp
+/macos-app-scaffold-new MyApp me.xueshi.myapp
 ```
 
-### `/enhance-macos-app` — 既存プロジェクトに機能を追加
+### `/macos-app-scaffold-enhance` — 既存プロジェクトに機能を追加
 
 現在のプロジェクトを分析し、既存の機能を表示し、不足している機能を選択して追加できます：
 
 ```
-/enhance-macos-app                  # 完全分析 + 機能選択
-/enhance-macos-app ci-cd            # CI/CD を直接追加
-/enhance-macos-app auto-update      # 自動更新を直接追加
-/enhance-macos-app logging          # ファイルログを直接追加
+/macos-app-scaffold-enhance                  # 完全分析 + 機能選択
+/macos-app-scaffold-enhance ci-cd            # CI/CD を直接追加
+/macos-app-scaffold-enhance auto-update      # 自動更新を直接追加
+/macos-app-scaffold-enhance logging          # ファイルログを直接追加
 ```
 
 ## インストール
@@ -80,9 +80,9 @@ cp -r macos-app-scaffold/skills/* ~/.claude/skills/
 インストール後、以下のコマンドで利用できます：
 
 ```
-/macos-app              # エントリーポイント（自動ルーティング）
-/new-macos-app          # 新規作成
-/enhance-macos-app      # 既存プロジェクト拡張
+/macos-app-scaffold              # エントリーポイント（自動ルーティング）
+/macos-app-scaffold-new          # 新規作成
+/macos-app-scaffold-enhance      # 既存プロジェクト拡張
 ```
 
 ## 生成されるファイル構造

@@ -1,5 +1,5 @@
 ---
-name: enhance-macos-app
+name: macos-app-scaffold-enhance
 description: Add features to an existing macOS app — CI/CD, auto-update, logging, SwiftLint, localization, Launch at Login, and more
 argument-hint: "[feature-name]"
 disable-model-invocation: true

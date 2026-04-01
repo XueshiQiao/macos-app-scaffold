@@ -9,7 +9,7 @@ Extracted from real-world patterns across multiple shipped macOS apps using Xcod
 ## Quick Start
 
 ```
-/macos-app
+/macos-app-scaffold
 ```
 
 That's it. The skill auto-detects whether you're in an existing project or starting fresh, and routes you to the right workflow.
@@ -17,19 +17,19 @@ That's it. The skill auto-detects whether you're in an existing project or start
 You can also be explicit:
 
 ```
-/macos-app new MyApp              # Create a new app
-/macos-app enhance                # Add features to current project
+/macos-app-scaffold new MyApp              # Create a new app
+/macos-app-scaffold enhance                # Add features to current project
 ```
 
 ## Skills
 
-### `/macos-app` — Entry point (auto-routes)
+### `/macos-app-scaffold` — Entry point (auto-routes)
 
 Detects your context and asks:
 - **Existing project found** → offer to add features (CI/CD, auto-update, logging, etc.)
 - **No project found** → walk through new app creation wizard
 
-### `/new-macos-app` — Create a new project
+### `/macos-app-scaffold-new` — Create a new project
 
 Interactive wizard that generates a complete macOS app project:
 
@@ -42,18 +42,18 @@ Interactive wizard that generates a complete macOS app project:
 - **And more**: SwiftLint, unit tests, Launch at Login, Accessibility permission gate, localization, file-based logging, Settings window, analytics, onboarding, Homebrew Cask, LICENSE, README
 
 ```
-/new-macos-app MyApp me.xueshi.myapp
+/macos-app-scaffold-new MyApp me.xueshi.myapp
 ```
 
-### `/enhance-macos-app` — Add features to an existing project
+### `/macos-app-scaffold-enhance` — Add features to an existing project
 
 Analyzes your current project, shows what's already in place, and lets you surgically add missing features:
 
 ```
-/enhance-macos-app                  # Full analysis + pick features
-/enhance-macos-app ci-cd            # Add CI/CD directly
-/enhance-macos-app auto-update      # Add auto-update directly
-/enhance-macos-app logging          # Add file-based logging
+/macos-app-scaffold-enhance                  # Full analysis + pick features
+/macos-app-scaffold-enhance ci-cd            # Add CI/CD directly
+/macos-app-scaffold-enhance auto-update      # Add auto-update directly
+/macos-app-scaffold-enhance logging          # Add file-based logging
 ```
 
 ## Install
@@ -80,9 +80,9 @@ cp -r macos-app-scaffold/skills/* ~/.claude/skills/
 After installation, the skills are available as:
 
 ```
-/macos-app              # Entry point (auto-routes)
-/new-macos-app          # Create new
-/enhance-macos-app      # Enhance existing
+/macos-app-scaffold              # Entry point (auto-routes)
+/macos-app-scaffold-new          # Create new
+/macos-app-scaffold-enhance      # Enhance existing
 ```
 
 ## What Gets Generated

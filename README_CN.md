@@ -9,7 +9,7 @@
 ## 快速开始
 
 ```
-/macos-app
+/macos-app-scaffold
 ```
 
 就这么简单。Skill 会自动检测你当前是否在一个已有项目中，然后引导你进入对应的流程。
@@ -17,19 +17,19 @@
 也可以直接指定：
 
 ```
-/macos-app new MyApp              # 创建新应用
-/macos-app enhance                # 为现有项目添加功能
+/macos-app-scaffold new MyApp              # 创建新应用
+/macos-app-scaffold enhance                # 为现有项目添加功能
 ```
 
 ## Skills
 
-### `/macos-app` — 入口（自动路由）
+###  `/macos-app-scaffold` — 入口（自动路由）
 
 检测当前上下文并提问：
 - **检测到已有项目** → 引导添加功能（CI/CD、自动更新、日志等）
 - **未检测到项目** → 进入新应用创建向导
 
-### `/new-macos-app` — 创建新项目
+### `/macos-app-scaffold-new` — 创建新项目
 
 交互式向导，生成完整的 macOS 应用项目：
 
@@ -42,18 +42,18 @@
 - **更多功能**：SwiftLint、单元测试、开机自启、辅助功能权限、本地化、文件日志、设置窗口、分析、引导页、Homebrew Cask、LICENSE、README
 
 ```
-/new-macos-app MyApp me.xueshi.myapp
+/macos-app-scaffold-new MyApp me.xueshi.myapp
 ```
 
-### `/enhance-macos-app` — 为已有项目添加功能
+### `/macos-app-scaffold-enhance` — 为已有项目添加功能
 
 分析当前项目，展示已有功能，让你按需添加缺失的部分：
 
 ```
-/enhance-macos-app                  # 完整分析 + 选择功能
-/enhance-macos-app ci-cd            # 直接添加 CI/CD
-/enhance-macos-app auto-update      # 直接添加自动更新
-/enhance-macos-app logging          # 直接添加文件日志
+/macos-app-scaffold-enhance                  # 完整分析 + 选择功能
+/macos-app-scaffold-enhance ci-cd            # 直接添加 CI/CD
+/macos-app-scaffold-enhance auto-update      # 直接添加自动更新
+/macos-app-scaffold-enhance logging          # 直接添加文件日志
 ```
 
 ## 安装
@@ -80,9 +80,9 @@ cp -r macos-app-scaffold/skills/* ~/.claude/skills/
 安装后，可用以下命令调用：
 
 ```
-/macos-app              # 入口（自动路由）
-/new-macos-app          # 创建新项目
-/enhance-macos-app      # 增强已有项目
+/macos-app-scaffold              # 入口（自动路由）
+/macos-app-scaffold-new          # 创建新项目
+/macos-app-scaffold-enhance      # 增强已有项目
 ```
 
 ## 生成的文件结构

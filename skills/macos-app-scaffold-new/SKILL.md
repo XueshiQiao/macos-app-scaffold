@@ -1,5 +1,5 @@
 ---
-name: new-macos-app
+name: macos-app-scaffold-new
 description: Scaffold a new macOS app with XcodeGen, GitHub Actions CI/CD, code signing, notarization, auto-update, and SwiftUI starter code
 argument-hint: "[AppName] [BundleID]"
 disable-model-invocation: true
