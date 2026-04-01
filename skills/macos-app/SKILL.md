@@ -1,7 +1,7 @@
 ---
 name: macos-app
 description: Scaffold a new macOS app or add features to an existing one. Auto-detects project context and routes accordingly.
-argument-hint: [new|enhance] [AppName]
+argument-hint: "[new|enhance] [AppName]"
 disable-model-invocation: false
 allowed-tools: Bash, Write, Read, Edit, Glob, Grep, Agent, Skill
 ---

@@ -1,7 +1,7 @@
 ---
 name: enhance-macos-app
 description: Add features to an existing macOS app — CI/CD, auto-update, logging, SwiftLint, localization, Launch at Login, and more
-argument-hint: [feature-name]
+argument-hint: "[feature-name]"
 disable-model-invocation: true
 allowed-tools: Bash, Write, Read, Edit, Glob, Grep, Agent
 ---
