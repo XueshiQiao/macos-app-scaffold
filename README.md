@@ -1,5 +1,7 @@
 # macos-app-scaffold
 
+[中文](README_CN.md) | [日本語](README_JA.md) | [Deutsch](README_DE.md)
+
 Claude Code plugin for scaffolding and enhancing production-ready macOS apps.
 
 Extracted from real-world patterns across multiple shipped macOS apps using XcodeGen, GitHub Actions, SwiftUI, and Apple notarization.

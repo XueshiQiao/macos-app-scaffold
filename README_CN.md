@@ -1,5 +1,7 @@
 # macos-app-scaffold
 
+[English](README.md) | [日本語](README_JA.md) | [Deutsch](README_DE.md)
+
 用于创建和增强生产级 macOS 应用的 Claude Code 插件。
 
 从多个已上架的 macOS 应用中提取的真实模式，涵盖 XcodeGen、GitHub Actions、SwiftUI 和 Apple 公证。
