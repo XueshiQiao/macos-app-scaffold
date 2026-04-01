@@ -58,16 +58,31 @@ XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリ
 
 ## インストール
 
+### ユニバーサル（Claude Code、Cursor、Codex、Gemini など 40 以上のエージェントに対応）
+
+```bash
+npx skills add XueshiQiao/macos-app-scaffold
+```
+
+### Claude Code のみ
+
 ```
 /plugin install github:XueshiQiao/macos-app-scaffold
+```
+
+### 手動インストール
+
+```bash
+git clone https://github.com/XueshiQiao/macos-app-scaffold.git
+cp -r macos-app-scaffold/skills/* ~/.claude/skills/
 ```
 
 インストール後、以下のコマンドで利用できます：
 
 ```
-/macos-app-scaffold:macos-app              # エントリーポイント
-/macos-app-scaffold:new-macos-app          # 新規作成
-/macos-app-scaffold:enhance-macos-app      # 既存プロジェクト拡張
+/macos-app              # エントリーポイント（自動ルーティング）
+/new-macos-app          # 新規作成
+/enhance-macos-app      # 既存プロジェクト拡張
 ```
 
 ## 生成されるファイル構造

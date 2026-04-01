@@ -58,16 +58,31 @@
 
 ## 安装
 
+### 通用安装（支持 Claude Code、Cursor、Codex、Gemini 等 40+ AI 编程助手）
+
+```bash
+npx skills add XueshiQiao/macos-app-scaffold
+```
+
+### 仅 Claude Code
+
 ```
 /plugin install github:XueshiQiao/macos-app-scaffold
+```
+
+### 手动安装
+
+```bash
+git clone https://github.com/XueshiQiao/macos-app-scaffold.git
+cp -r macos-app-scaffold/skills/* ~/.claude/skills/
 ```
 
 安装后，可用以下命令调用：
 
 ```
-/macos-app-scaffold:macos-app              # 入口
-/macos-app-scaffold:new-macos-app          # 创建新项目
-/macos-app-scaffold:enhance-macos-app      # 增强已有项目
+/macos-app              # 入口（自动路由）
+/new-macos-app          # 创建新项目
+/enhance-macos-app      # 增强已有项目
 ```
 
 ## 生成的文件结构

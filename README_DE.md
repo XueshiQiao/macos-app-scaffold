@@ -58,16 +58,31 @@ Analysiert dein aktuelles Projekt, zeigt vorhandene Funktionen an und lässt dic
 
 ## Installation
 
+### Universal (funktioniert mit Claude Code, Cursor, Codex, Gemini und 40+ Agents)
+
+```bash
+npx skills add XueshiQiao/macos-app-scaffold
+```
+
+### Nur Claude Code
+
 ```
 /plugin install github:XueshiQiao/macos-app-scaffold
+```
+
+### Manuelle Installation
+
+```bash
+git clone https://github.com/XueshiQiao/macos-app-scaffold.git
+cp -r macos-app-scaffold/skills/* ~/.claude/skills/
 ```
 
 Nach der Installation sind die Skills verfügbar als:
 
 ```
-/macos-app-scaffold:macos-app              # Einstiegspunkt
-/macos-app-scaffold:new-macos-app          # Neu erstellen
-/macos-app-scaffold:enhance-macos-app      # Bestehendes erweitern
+/macos-app              # Einstiegspunkt (automatisches Routing)
+/new-macos-app          # Neu erstellen
+/enhance-macos-app      # Bestehendes erweitern
 ```
 
 ## Generierte Dateistruktur
