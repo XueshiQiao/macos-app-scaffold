@@ -37,6 +37,29 @@ Ask user to pick one:
 
 Default: **A**
 
+### Step 2.5: Background Helper (advanced — default None)
+
+Ask once. Most apps don't need a separate helper process; the default is **None**
+and you should not push users toward the other options. Show this table when asking:
+
+| Option | What you get | Runs as | Approval | When to pick it | Limits / cost |
+|---|---|---|---|---|---|
+| **A) None** *(default)* | Single-process app. | user | n/a | 90% of apps. Anything you can do inside the main app process. | none |
+| **B) Login Item** (`SMAppService.mainApp`) | Main app auto-launches at login. | user | none | Menu bar tools, chat clients, quick-capture apps that the user wants opened automatically. | Adds zero capability — only convenience. |
+| **C) User Agent** (`SMAppService.agent`) | Separate `LaunchAgent` helper binary; launchd starts it on demand once the user has logged in. App ↔ helper via XPC. | user | none | Persistent background work that doesn't need root: clipboard watcher, sync engine, global hotkey daemon, on-device AI worker. | Two-process complexity, must design XPC protocol, helper signed with same Team ID. |
+| **D) Privileged Daemon** (`SMAppService.daemon`) | Separate `LaunchDaemon` helper binary; launchd starts it on demand at the system level (no login required). App ↔ helper via privileged XPC. | **root** | **user must approve in System Settings** | VPN / packet filter, system-wide network proxy, kext-adjacent ops, services that must run before any user logs in (set `RunAtLoad` for that case). | High MAS review bar, helper effectively unsandboxable, runtime XPC caller authorization is your responsibility (see `HelperMain.swift`), user-visible approval flow. |
+
+**Default: A (None).** Confirm explicitly before generating C or D. If the user
+picks D, ask one verification question: *"Which specific operation needs root?"* —
+if they cannot name one, steer them to C.
+
+If C is selected, copy `templates/agent/` files into the project (see "Background
+Helper Templates" section below).
+If D is selected, copy `templates/daemon/` files (and tell the user about the
+System Settings approval step).
+
+If A or B is selected, skip the helper templates entirely.
+
 ### Step 3: Features
 
 Present as a checklist. User can accept defaults or customize:
@@ -752,6 +775,35 @@ jobs:
             done
           fi
 
+          # Sign embedded background helper executables (SMAppService agents/daemons).
+          # The helper sits at Contents/MacOS/<helper> and the launchd plist sits at
+          # Contents/Library/Launch{Agents,Daemons}/<helper-bundle-id>.plist. We sign
+          # any non-main Mach-O in Contents/MacOS, with the helper's own entitlements
+          # if present.
+          if [ -d "$APP_PATH/Contents/MacOS" ]; then
+            MAIN_EXECUTABLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" \
+              "$APP_PATH/Contents/Info.plist") || {
+                echo "::error::Could not read CFBundleExecutable from $APP_PATH/Contents/Info.plist"
+                exit 1
+            }
+            for helper in "$APP_PATH/Contents/MacOS/"*; do
+              [ -f "$helper" ] || continue
+              base=$(basename "$helper")
+              [ "$base" = "$MAIN_EXECUTABLE" ] && continue
+              file "$helper" | grep -q "Mach-O" || continue
+
+              helper_ent="{{AppName}}/Helper/${base}.entitlements"
+              if [ -f "$helper_ent" ]; then
+                codesign --force --options runtime --timestamp \
+                  --entitlements "$helper_ent" \
+                  --sign "$SIGNING_IDENTITY" "$helper"
+              else
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGNING_IDENTITY" "$helper"
+              fi
+            done
+          fi
+
           # Sign main app bundle with entitlements
           codesign --force --options runtime --timestamp \
             --entitlements "$ENTITLEMENTS" \
@@ -1139,6 +1191,79 @@ sources:
 ```
 
 Create `{{AppName}}/Resources/Localizable.xcstrings` with base entries for any UI strings in the generated files.
+
+---
+
+## Background Helper Templates
+
+Only use this section if the user picked **C (User Agent)** or **D (Privileged
+Daemon)** in Step 2.5. For A and B, skip entirely.
+
+Templates live alongside this skill:
+
+```
+templates/
+├── agent/    # SMAppService.agent — user-context helper (no approval required)
+└── daemon/   # SMAppService.daemon — root helper (user approval required)
+```
+
+Each template directory contains:
+
+| File | Purpose |
+|---|---|
+| `README.md` | Per-template explanation; read this first |
+| `HelperProtocol.swift` | Shared XPC protocol — compiled into BOTH targets |
+| `HelperMain.swift` | Helper executable entry point |
+| `HelperManager.swift` | App-side controller (register/unregister + XPC client) |
+| `LaunchAgent.plist` / `LaunchDaemon.plist` | launchd plist embedded in app bundle |
+| `project.yml.snippet` | XcodeGen target + dependency wiring |
+| `entitlements.snippet.xml` | Helper target entitlements |
+
+### Generation steps (when helper is selected)
+
+1. Read the appropriate template `README.md` first to understand the structure.
+2. Copy the template files into the project, substituting placeholders:
+   - `{{AppName}}` → user's app name
+   - `{{AppBundleID}}` → user's bundle ID (e.g. `me.xueshi.myapp`)
+   - `{{HelperBundleID}}` → `<AppBundleID>.helper` (e.g. `me.xueshi.myapp.helper`)
+   - `{{HelperExecutableName}}` → `<AppName>Helper` (e.g. `MyAppHelper`)
+   - `{{TeamID}}` → only for daemon; ask the user (`security find-identity -p codesigning`)
+3. Suggested layout in the project:
+   ```
+   {{AppName}}/
+   ├── Sources/                       (existing app code, includes HelperManager.swift)
+   ├── Shared/
+   │   └── HelperProtocol.swift       (compiled into BOTH targets)
+   └── Helper/
+       ├── HelperMain.swift
+       ├── {{HelperExecutableName}}.entitlements
+       └── Launch{Agents,Daemons}/
+           └── {{HelperBundleID}}.plist
+   ```
+4. Append the `project.yml.snippet` blocks into the user's `project.yml`.
+5. Place `HelperManager.swift` in `Sources/` so the app can call it.
+6. After scaffolding, tell the user:
+   - Run `xcodegen generate` and build once.
+   - For agent: call `try HelperManager.shared.register()` from a Settings toggle. Done.
+   - For daemon: call `try HelperManager.shared.register()`, then watch for
+     `status == .requiresApproval` and surface a button that calls
+     `HelperManager.shared.openSystemSettings()`.
+
+### Codesign loop
+
+The CI codesign step in `build.yml` already includes a sweep of
+`Contents/MacOS/<helper>` that picks up `<helper>.entitlements` if present at
+`{{AppName}}/Helper/<helper>.entitlements`. Verify the path matches.
+
+### What NOT to do
+
+- Don't generate the daemon template unless the user explicitly confirmed they
+  need root for a specific named operation. Default to agent or to no helper.
+- Don't merge `HelperProtocol.swift` into the app target only — the helper
+  target must compile against the exact same source file, or the connection
+  invalidates silently at runtime.
+- Don't enable `KeepAlive` / `RunAtLoad` in the launchd plist unless the user
+  asked for "always running". On-demand activation is the recommended pattern.
 
 ---
 

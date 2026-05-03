@@ -27,13 +27,30 @@
 
 **应用功能**
 - 自动更新（GitHub API 轮询 或 Sparkle）
-- 开机自启（`SMAppService`）
+- 开机自启（`SMAppService.mainApp`）
+- 后台 Helper + XPC（`SMAppService.agent` 用户态 或 `.daemon` 特权 — 详见下表）
 - 辅助功能权限引导
 - 设置 / 偏好设置窗口
 - 文件日志（`~/Library/Logs/<AppName>.log`）
 - 本地化（多语言）
 - 分析（Aptabase，隐私友好）
 - 引导页 / 欢迎窗口
+
+### 后台 Helper 类型选择
+
+绝大多数 app 单进程就够了。下面四个选项是按需启用的进阶能力，**默认 None**。
+请选择满足需求的最小方案。
+
+| 选项 | 提供什么 | 运行身份 | 是否需要用户授权 | 何时使用 | 限制 |
+|---|---|---|---|---|---|
+| **None**（默认） | 单进程 app | 用户 | 无 | 所有能在主进程内完成的工作 | 无 |
+| **Login Item**（`SMAppService.mainApp`） | 主 app 开机自启 | 用户 | 无 | 菜单栏工具、聊天客户端、希望开机自动打开的快速记录类应用 | 不增加任何能力，仅是便利性 |
+| **User Agent**（`SMAppService.agent`） | 独立 helper 二进制；用户登录后由 launchd 按需启动，app ↔ helper 通过 XPC 通信 | 用户 | 无 | 不需要 root 的后台常驻：剪贴板监听、同步引擎、全局快捷键守护、本机 AI 推理 | 双进程架构、需设计 XPC 协议、helper 需与 app 同 Team ID 签名 |
+| **Privileged Daemon**（`SMAppService.daemon`） | 独立 helper 二进制；由 launchd 在系统级别按需启动（无需用户登录），app ↔ helper 通过特权 XPC 通信 | **root** | **需要**（在「系统设置 → 登录项与扩展」中开启） | VPN / 包过滤、系统级代理、驱动相关、必须在任何用户登录前就跑的服务（这种情况需在 plist 中加 `RunAtLoad`） | MAS 审核门槛高、helper 实际上无法沙盒、运行时 XPC 调用方鉴权由 helper 自己负责、首次启用需引导用户授权 |
+
+User Agent 和 Privileged Daemon 的可运行模板（含 launchd plist、XPC 协议、app
+端控制器、`project.yml` 配置）位于
+[`skills/macos-app-scaffold-new/templates/`](skills/macos-app-scaffold-new/templates/)。
 
 **代码质量**
 - SwiftLint 配置（合理的默认规则）

@@ -27,13 +27,32 @@ Alle Funktionen sind interaktiv — wähle, was du brauchst, überspringe den Re
 
 **App-Funktionen**
 - Auto-Update (GitHub API Polling oder Sparkle)
-- Autostart (`SMAppService`)
+- Autostart (`SMAppService.mainApp`)
+- Background Helper mit XPC (`SMAppService.agent` im Benutzerkontext oder `.daemon` privilegiert — siehe Tabelle unten)
 - Barrierefreiheits-Berechtigungsgate
 - Einstellungen / Preferences Fenster
 - Datei-basiertes Logging (`~/Library/Logs/<AppName>.log`)
 - Lokalisierung (mehrsprachig)
 - Analytics (Aptabase, datenschutzfreundlich)
 - Onboarding / Willkommensfenster
+
+### Background-Helper-Optionen
+
+Die meisten Apps laufen als ein einziger Prozess. Diese vier Optionen sind
+optionale Erweiterungen — **Standard ist None**. Wähle die kleinste Option,
+die deinen Anforderungen genügt.
+
+| Option | Was du bekommst | Läuft als | Benutzergenehmigung | Wann verwenden | Einschränkungen |
+|---|---|---|---|---|---|
+| **None** *(Standard)* | App mit einem Prozess | Benutzer | keine | Alles, was im Hauptprozess der App erledigt werden kann | keine |
+| **Login Item** (`SMAppService.mainApp`) | Haupt-App startet automatisch beim Login | Benutzer | keine | Menüleisten-Tools, Chat-Clients, Quick-Capture-Apps, die automatisch geöffnet werden sollen | Bringt keine zusätzliche Fähigkeit — nur Komfort |
+| **User Agent** (`SMAppService.agent`) | Separate Helper-Binary; launchd startet sie bei Bedarf, sobald der Benutzer angemeldet ist. App ↔ Helper über XPC | Benutzer | keine | Persistente Hintergrundarbeit ohne Root: Clipboard-Watcher, Sync-Engine, globale Hotkeys, On-Device-AI-Worker | Zwei-Prozess-Architektur, XPC-Protokoll erforderlich, Helper mit derselben Team-ID signiert |
+| **Privileged Daemon** (`SMAppService.daemon`) | Separate Helper-Binary; launchd startet sie bei Bedarf auf Systemebene (keine Anmeldung erforderlich). App ↔ Helper über privilegiertes XPC | **root** | **erforderlich** (Systemeinstellungen → Anmeldeobjekte & Erweiterungen) | VPN / Paketfilter, systemweiter Proxy, Kext-nahe Operationen, Dienste, die vor jeder Benutzeranmeldung laufen müssen (in dem Fall `RunAtLoad` setzen) | Hohe MAS-Review-Hürde, Helper praktisch nicht sandboxbar, Laufzeit-XPC-Aufruferautorisierung liegt beim Helper selbst, sichtbarer Genehmigungsfluss |
+
+Lauffähige Vorlagen für User Agent und Privileged Daemon — inklusive launchd
+plist, XPC-Protokoll, App-seitigem Controller und `project.yml`-Konfiguration —
+befinden sich unter
+[`skills/macos-app-scaffold-new/templates/`](skills/macos-app-scaffold-new/templates/).
 
 **Code-Qualität**
 - SwiftLint Konfiguration (sinnvolle Standardregeln)

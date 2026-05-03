@@ -27,13 +27,31 @@ XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリ
 
 **アプリ機能**
 - 自動更新（GitHub API ポーリング または Sparkle）
-- ログイン時起動（`SMAppService`）
+- ログイン時起動（`SMAppService.mainApp`）
+- バックグラウンド Helper + XPC（`SMAppService.agent` ユーザコンテキスト または `.daemon` 特権 — 下記の表を参照）
 - アクセシビリティ権限ゲート
 - 設定 / 環境設定ウィンドウ
 - ファイルベースのログ（`~/Library/Logs/<AppName>.log`）
 - ローカライズ（多言語）
 - アナリティクス（Aptabase、プライバシー配慮）
 - オンボーディング / ウェルカムウィンドウ
+
+### バックグラウンド Helper の選択肢
+
+ほとんどのアプリは単一プロセスで十分です。以下の 4 つは必要に応じて選ぶ拡張機能で、
+**デフォルトは None**。要件を満たす最小の選択肢を選んでください。
+
+| 選択肢 | 提供されるもの | 実行ユーザ | ユーザー承認 | 選ぶべきとき | 制約 |
+|---|---|---|---|---|---|
+| **None**（デフォルト） | 単一プロセスのアプリ | ユーザ | 不要 | メインアプリのプロセス内で完結するすべての処理 | なし |
+| **Login Item**（`SMAppService.mainApp`） | アプリ本体がログイン時に自動起動 | ユーザ | 不要 | メニューバーツール、チャットクライアント、自動で開きたいクイックキャプチャ系アプリ | 機能は増えず、利便性のみ |
+| **User Agent**（`SMAppService.agent`） | 別の helper バイナリ。ユーザがログインした後、launchd が必要に応じて起動。アプリ ↔ helper は XPC で通信 | ユーザ | 不要 | root が不要なバックグラウンド常駐：クリップボード監視、同期エンジン、グローバルホットキー、オンデバイス AI 処理 | 2 プロセス構成、XPC プロトコルの設計が必要、helper はアプリと同じ Team ID で署名 |
+| **Privileged Daemon**（`SMAppService.daemon`） | 別の helper バイナリ。launchd がシステムレベルで必要に応じて起動（ログイン不要）。アプリ ↔ helper は特権 XPC で通信 | **root** | **必要**（システム設定 → ログイン項目と機能拡張） | VPN / パケットフィルタ、システム全体プロキシ、kext 関連、ユーザログイン前から動く必要があるサービス（その場合は plist に `RunAtLoad` を追加） | MAS 審査の壁が高い、helper は実質サンドボックス不可、実行時の XPC 呼び出し元の認可は helper 自身の責任、ユーザの承認フローが必要 |
+
+User Agent と Privileged Daemon の実行可能なテンプレート（launchd plist、
+XPC プロトコル、アプリ側コントローラ、`project.yml` 構成を含む）は
+[`skills/macos-app-scaffold-new/templates/`](skills/macos-app-scaffold-new/templates/)
+にあります。
 
 **コード品質**
 - SwiftLint 設定（合理的なデフォルトルール）

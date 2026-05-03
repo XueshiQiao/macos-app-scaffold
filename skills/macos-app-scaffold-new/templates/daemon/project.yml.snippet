@@ -1,0 +1,60 @@
+# Append these blocks to your existing project.yml.
+#
+# Two changes:
+#   1. A new `tool` target for the helper executable.
+#   2. The main app target gets the helper added as a dependency and the
+#      LaunchDaemon.plist copied into Contents/Library/LaunchDaemons/.
+
+targets:
+
+  # ---- Helper target (NEW) -------------------------------------------------
+  {{HelperExecutableName}}:
+    type: tool                        # command-line tool, no .app bundle
+    platform: macOS
+    sources:
+      - path: {{AppName}}/Helper/HelperMain.swift
+      - path: {{AppName}}/Shared/HelperProtocol.swift   # SHARED with app target
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: {{HelperBundleID}}
+        PRODUCT_NAME: {{HelperExecutableName}}
+        SKIP_INSTALL: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        OTHER_CODE_SIGN_FLAGS: "--timestamp"
+
+  # ---- Main app target (MODIFY) -------------------------------------------
+  {{AppName}}:
+    # ... your existing config ...
+    sources:
+      - path: {{AppName}}/Sources
+      - path: {{AppName}}/Shared/HelperProtocol.swift   # SHARED with helper
+      # Copies the plist into the .app bundle at the right path. The Copy
+      # Files build phase destination "wrapper" resolves to the .app root,
+      # so on macOS the subpath MUST start with "Contents/" to land inside
+      # the bundle's Contents directory.
+      - path: {{AppName}}/Helper/LaunchDaemons
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    dependencies:
+      # `copy.destination: executables` puts the binary at
+      # Contents/MacOS/{{HelperExecutableName}}.
+      # `codeSign: true` is a top-level dependency option (NOT a key inside
+      # `copy`); it tells Xcode to re-sign the helper when copied.
+      - target: {{HelperExecutableName}}
+        copy:
+          destination: executables
+        codeSign: true
+
+# Suggested directory layout (relative to repo root):
+#
+#   {{AppName}}/
+#   ├── Sources/                       (existing app code)
+#   ├── Shared/
+#   │   └── HelperProtocol.swift       (compiled into BOTH targets)
+#   └── Helper/
+#       ├── HelperMain.swift
+#       └── LaunchDaemons/
+#           └── {{HelperBundleID}}.plist

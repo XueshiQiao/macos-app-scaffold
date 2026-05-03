@@ -27,13 +27,30 @@ All features are interactive — you pick what you need, skip what you don't.
 
 **App Features**
 - Auto-update (GitHub API polling or Sparkle)
-- Launch at Login (`SMAppService`)
+- Launch at Login (`SMAppService.mainApp`)
+- Background helper with XPC (`SMAppService.agent` user-context, or `.daemon` privileged) — see table below
 - Accessibility permission gate
 - Settings / Preferences window
 - File-based logging (`~/Library/Logs/<AppName>.log`)
 - Localization (multi-language)
 - Analytics (Aptabase, privacy-respecting)
 - Onboarding / Welcome window
+
+### Background Helper Options
+
+Most apps run as a single process. These four options let you opt into more —
+**default is None**. Pick the smallest one that fits.
+
+| Option | What you get | Runs as | User approval | Pick when… | Limits |
+|---|---|---|---|---|---|
+| **None** *(default)* | Single-process app. | user | n/a | Everything you can do inside the main app process. | none |
+| **Login Item** (`SMAppService.mainApp`) | Main app auto-launches at login. | user | none | Menu bar tools, chat clients, quick-capture apps you want opened automatically. | Adds zero capability — only convenience. |
+| **User Agent** (`SMAppService.agent`) | Separate helper binary; launchd starts it on demand once the user has logged in. App ↔ helper via XPC. | user | none | Persistent background work without root: clipboard watcher, sync engine, hotkey daemon, on-device AI worker. | Two-process design, must define an XPC protocol, helper signed with same Team ID. |
+| **Privileged Daemon** (`SMAppService.daemon`) | Separate helper binary; launchd starts it on demand at the system level (no login required). App ↔ helper via privileged XPC. | **root** | **required** (System Settings → Login Items) | VPN / packet filter, system-wide proxy, kext-adjacent ops, services that must run before any user logs in (set `RunAtLoad` for that). | High MAS review bar, helper effectively unsandboxable, runtime XPC caller authorization is the helper's responsibility, user-visible approval flow. |
+
+Working templates for User Agent and Privileged Daemon — including the
+launchd plist, XPC protocol, app-side controller, and `project.yml` wiring —
+live in [`skills/macos-app-scaffold-new/templates/`](skills/macos-app-scaffold-new/templates/).
 
 **Code Quality**
 - SwiftLint config with sensible defaults

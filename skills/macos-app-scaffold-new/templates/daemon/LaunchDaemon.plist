@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Rename this file to {{HelperBundleID}}.plist before embedding.
+    Embedded path inside the app bundle:
+        Contents/Library/LaunchDaemons/{{HelperBundleID}}.plist
+
+    Pass the same filename to SMAppService.daemon(plistName:):
+        SMAppService.daemon(plistName: "{{HelperBundleID}}.plist")
+
+    Keys:
+    - Label: must equal the filename without ".plist".
+    - BundleProgram: path to the helper executable, relative to the .app
+      bundle root (so for a macOS app, starts with "Contents/MacOS/...").
+    - MachServices: tells launchd to register a Mach service with this name.
+      Must match HelperConstants.machServiceName in Swift code.
+    - AssociatedBundleIdentifiers: lets the user identify which app owns
+      this daemon in System Settings → Login Items & Extensions.
+
+    KeepAlive / RunAtLoad are intentionally OMITTED so the helper starts
+    ON DEMAND (when the app first connects). For a daemon that must be
+    running before any user logs in (e.g. an SSH-replacement service), set
+    RunAtLoad to true. Most apps do not need this.
+
+    NOTE on caller authorization:
+        launchd does NOT consult SMAuthorizedClients here — that key
+        belongs to the legacy SMJobBless flow, not SMAppService. For
+        SMAppService.daemon, the registration trust comes from app/helper
+        sharing a Team ID inside the same signed bundle. RUNTIME caller
+        authorization (refusing XPC connections from other processes) is
+        YOUR responsibility — see the validateClient() helper in
+        HelperMain.swift.
+
+    NOTE on ProcessType:
+        Omitted so launchd picks a sensible default. Set to "Background"
+        for low-priority workers, "Adaptive" to let launchd manage, or
+        "Interactive" only if the helper services user-facing UI events.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{HelperBundleID}}</string>
+
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/{{HelperExecutableName}}</string>
+
+    <key>MachServices</key>
+    <dict>
+        <key>{{HelperBundleID}}</key>
+        <true/>
+    </dict>
+
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>{{AppBundleID}}</string>
+    </array>
+</dict>
+</plist>

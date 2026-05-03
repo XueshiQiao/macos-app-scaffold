@@ -221,6 +221,69 @@ Generate sensible defaults (see new-macos-app template). Ask if they want strict
 - Uses `SMAppService` (macOS 13+)
 - If SettingsView exists, offer to add the toggle there
 
+### Feature: Background Helper (User Agent or Privileged Daemon)
+
+> Advanced. Almost no app needs this. The Launch at Login feature above is the
+> right answer for "I want my app to start at login". This feature is for
+> apps that need a **separate helper process** running in the background.
+
+**Decision table** (show this verbatim when the user asks for this feature):
+
+| Option | What you get | Runs as | Approval | Pick when… |
+|---|---|---|---|---|
+| **User Agent** (`SMAppService.agent`) | Separate helper binary; launchd starts it on demand once the user has logged in. App ↔ helper via XPC. | user | none | Background work that does **not** need root: clipboard watcher, sync engine, hotkey daemon, on-device AI worker. |
+| **Privileged Daemon** (`SMAppService.daemon`) | Separate helper binary; launchd starts it on demand at the system level (no login required). App ↔ helper via privileged XPC. | **root** | **user must approve in System Settings** | VPN, packet filter, kext-adjacent, system-wide proxy, services that must run before any user logs in (set `RunAtLoad` for that). |
+
+Default: **User Agent.** Confirm explicitly before adding the daemon variant.
+If the user picks daemon, ask one verification question: *"Which specific
+operation needs root?"* — if they cannot name one, steer them to agent.
+
+**Adds (User Agent):**
+- `Shared/HelperProtocol.swift` (compiled into both targets)
+- `Helper/HelperMain.swift`
+- `Helper/LaunchAgents/<HelperBundleID>.plist`
+- `Helper/<HelperExecutableName>.entitlements`
+- `Sources/HelperManager.swift`
+
+**Adds (Privileged Daemon):**
+- Same five files but under `Helper/LaunchDaemons/`
+- Plist contains `SMAuthorizedClients` with the app's designated requirement
+- `HelperManager.swift` includes status polling and `openSystemSettings()`
+
+**Modifies:**
+- `project.yml` — adds a `tool`-type helper target, copies the plist into
+  `Contents/Library/Launch{Agents,Daemons}/`, and lists the helper as a
+  dependency of the main app with `copy.destination: executables`
+- `.github/workflows/build.yml` — extends the codesign loop to sign
+  `Contents/MacOS/<helper>` with `<helper>.entitlements` if present
+- Optionally, the existing SettingsView — adds a toggle bound to
+  `HelperManager.shared`
+
+**Templates location.** The agent and daemon templates ship with the
+companion `macos-app-scaffold-new` skill. From this skill's directory the
+relative path is `../macos-app-scaffold-new/templates/{agent,daemon}/`; from
+the repo root it is `skills/macos-app-scaffold-new/templates/{agent,daemon}/`.
+If you cannot find them locally (e.g., user installed only one skill), fetch
+from the upstream repo at
+`https://github.com/XueshiQiao/macos-app-scaffold/tree/main/skills/macos-app-scaffold-new/templates`.
+Read each template's `README.md` before copying.
+
+**Placeholders to substitute:**
+- `{{AppName}}`, `{{AppBundleID}}` — read from `project.yml`
+- `{{HelperBundleID}}` — default `<AppBundleID>.helper`, ask to confirm
+- `{{HelperExecutableName}}` — default `<AppName>Helper`, ask to confirm
+- `{{TeamID}}` — daemon only; ask the user, or run
+  `security find-identity -p codesigning -v` and offer the matches
+
+**After generating, tell the user:**
+1. Run `xcodegen generate` and build.
+2. For agent: call `try HelperManager.shared.register()` from a Settings toggle. Helper launches on first XPC call.
+3. For daemon: call `try HelperManager.shared.register()`. If `status` becomes `.requiresApproval`, surface a button that calls `HelperManager.shared.openSystemSettings()`. After the user flips the switch, `status` transitions to `.enabled`.
+4. Test without rebooting:
+   - Agent: `launchctl kickstart -k gui/$(id -u)/<HelperBundleID>`
+   - Daemon: `sudo launchctl kickstart -k system/<HelperBundleID>`
+   - Logs: `log stream --predicate 'subsystem == "<HelperBundleID>"'`
+
 ### Feature: Accessibility Permission Gate
 
 **Adds:** `PermissionManager.swift`
@@ -323,6 +386,8 @@ For argument-based invocation, accept these aliases:
 | `swiftlint`, `lint` | SwiftLint |
 | `test`, `tests`, `unit-test` | Unit Test Target |
 | `launch-at-login`, `login`, `autostart` | Launch at Login |
+| `helper`, `agent`, `xpc-helper`, `background-helper` | Background Helper — User Agent |
+| `daemon`, `privileged-helper`, `root-helper` | Background Helper — Privileged Daemon |
 | `accessibility`, `a11y`, `permission` | Accessibility Gate |
 | `localization`, `l10n`, `i18n` | Localization |
 | `settings`, `preferences`, `prefs` | Settings Window |
