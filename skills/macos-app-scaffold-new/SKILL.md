@@ -23,6 +23,33 @@ If arguments are missing, ask the user before proceeding.
 
 Ask questions in this exact order. Present each step clearly with numbered/lettered options and defaults in **bold**. Wait for user response before proceeding to the next step. You may combine steps 3 and 4 into a single message if appropriate, presenting them as a checklist.
 
+### Step 0: Generation strategy — template repo vs from-scratch (ask first)
+
+Ask the user:
+
+> I can scaffold this two ways:
+> **A) From the template repo** *(default, fastest, fewest tokens)* — clones `XueshiQiao/macos-app-starter` and applies a small rename + customization diff. Best when your needs match the template's flavor (Menu Bar + Window hybrid, Sparkle, signed CI, full i18n, MIT, no sandbox).
+> **B) From scratch** — generates every file from the templates in this skill. Best when your archetype/feature mix is far from the template (e.g., Menu Bar only, no Sparkle, sandboxed, no localization).
+>
+> Which would you like? **(default A)**
+
+If the user picks **A (template)**, follow "Generation Path A: Template Clone" below — most steps simplify to "delete the parts you don't need" and "rename".
+
+If the user picks **B (from-scratch)**, follow the existing `Step 1` → `Step 5` flow and the `Generation Rules` section.
+
+The template's exact flavor (so you can judge fit on the user's behalf):
+- Archetype: Menu Bar + Window (hybrid)
+- Sandbox: No
+- SPM deps: Sparkle, KeyboardShortcuts, Aptabase
+- Auto-update: Sparkle
+- Background helper: None
+- Languages: English + Simplified Chinese
+- License: MIT
+- Cask: Draft (template_only topology)
+- CI/CD: Two-track signed/unsigned (workflow file is in the template repo)
+
+If 5+ of these don't match what the user wants, recommend B.
+
 ### Step 1: Identity (from args or ask)
 
 - **App Name** (required) — used for directory name, target name, display name
@@ -89,8 +116,30 @@ Present as a checklist. User can accept defaults or customize:
 | Auto release on `v*` tags | **Yes** | Requires CI/CD | `softprops/action-gh-release@v2` |
 | Release notes languages | **English** | Requires auto release | User can add more: Chinese, Japanese, German, etc. |
 | Auto-update mechanism | **None** | Requires CI/CD + Apple account | A) GitHub API polling (lightweight) B) Sparkle (full-featured, requires SPM dep) C) None |
-| Homebrew Cask formula | **No** | Requires CI/CD | Template `.rb` file for `brew install --cask` |
+| Homebrew Cask formula | **No** | Requires CI/CD | Template `.rb` file for `brew install --cask`. If yes, ALSO ask the tap-topology question below. |
 | License | **MIT** | — | MIT / GPL-3.0 / Apache-2.0 / None |
+
+#### Step 4a: Cask publishing target (only if Homebrew Cask = Yes)
+
+Modern Homebrew (5.x) refuses to install casks from arbitrary paths — they must
+live in a tap. Asking up front avoids generating a cask file in a location
+nobody can install from. Present these four options:
+
+| Option | Where the `.rb` lives | Install command users will run | When to pick |
+|---|---|---|---|
+| **A) Existing shared tap** *(default if user has one)* | `<owner>/homebrew-tap/Casks/<name>.rb` (separate repo) | `brew install --cask <owner>/tap/<name>` | User already publishes other casks from one shared tap. Ask for `<owner>` and confirm the repo name. |
+| **B) New per-app tap** | `<owner>/homebrew-<name>/Casks/<name>.rb` (new separate repo) | `brew install --cask <owner>/<name>/<name>` | First cask, no shared tap yet, prefer per-app isolation. The skill scaffolds the tap repo skeleton (README + `Casks/`), but the user must `gh repo create` it. |
+| **C) Submit to homebrew/cask** | upstream `Homebrew/homebrew-cask` PR | `brew install --cask <name>` | App is signed, notarized, has public releases, and has a working `livecheck`. Skill writes the cask + a checklist; user opens the PR manually. Note: `brew audit --new` rules apply only here. |
+| **D) Template only** | `Casks/<name>.rb` in the app repo (NOT installable as-is) | n/a | User wants to decide later. README will document this is a draft and not a working install. |
+
+Default: **A** if the user names an existing tap, otherwise **B**.
+
+Capture: `cask_topology` ∈ {shared_tap, per_app_tap, homebrew_cask, template_only},
+`tap_owner` (for A/B), `tap_repo_name` (for A: usually `homebrew-tap`; for B: `homebrew-<name>`).
+
+These values drive: where the `.rb` is written, the README install command,
+the CI cask-bump step's target repo, and which validation commands appear in
+the post-generation summary.
 | README.md | **Yes** | — | With badges (build status, macOS version, license), install instructions, screenshots section |
 
 ### Step 5: Always Generated (no choice, do not ask)
@@ -101,6 +150,75 @@ These are always created regardless of choices:
 - Entitlements file (content varies based on sandbox choice)
 
 ---
+
+## Generation Path A: Template Clone (default)
+
+Use this when the user picked **A** in Step 0. This is dramatically cheaper in tokens because the template repo holds all the boilerplate.
+
+### Path A: Steps
+
+1. **Clone via GitHub template:**
+   ```bash
+   gh repo create <OwnerOrUser>/<NewRepoName> --template XueshiQiao/macos-app-starter --public --clone
+   cd <NewRepoName>
+   ```
+   If the user wants the project locally without creating a GitHub repo yet, use `gh repo clone` + delete-remote pattern, or `git clone --depth=1` + `rm -rf .git && git init`.
+
+2. **Rename**. Find-and-replace across the repo:
+   - `MacOSAppStarter` → `<AppName>`
+   - `dev.xueshi.macos-app-starter` → `<BundleID>`
+   - `macosappstarter` (lowercase, in cask file) → `<appname-lowercase>`
+   - `XueshiQiao` → user's GitHub owner (in README badges, AGENTS.md, cask file URL)
+   - Update `LICENSE` copyright holder
+
+   Files to touch (all done with `Edit`):
+   - `project.yml`
+   - `Casks/macosappstarter.rb` (rename file too)
+   - `LICENSE`
+   - `README.md`
+   - `AGENTS.md` (which CLAUDE.md symlinks to)
+   - All Swift sources under `MacOSAppStarter/Sources/` (the `MacOSAppStarter` directory itself must also be renamed to `<AppName>/`)
+   - `MacOSAppStarter/Resources/MacOSAppStarter.entitlements` (rename file)
+   - `MacOSAppStarterTests/MacOSAppStarterTests.swift` (rename test class + dir)
+   - `Localizable.xcstrings` and `InfoPlist.xcstrings` (only the literal app name strings)
+
+3. **Apply user-chosen customizations.** For each thing the user opted *out* of, delete the corresponding files/sections:
+
+   | If user said NO to | Delete / modify |
+   |---|---|
+   | Menu Bar archetype (windowed only) | `AppDelegate.swift` (status item code), shrink to plain `NSApplicationDelegate`. Set `LSUIElement: false` (already false in template). Remove menu bar popover code. |
+   | Window archetype (menu bar only) | Remove main `WindowGroup` from `MacOSAppStarterApp.swift`. Set `LSUIElement: true`. Remove `ContentView.swift`. |
+   | Sparkle | Remove SPM dep, `UpdateManager.swift`, Update tab in Settings, `Check for Updates…` menu command. |
+   | KeyboardShortcuts | Remove SPM dep, hotkey registration in `AppDelegate`, Shortcuts tab in Settings. |
+   | Aptabase | Remove SPM dep, `Analytics.swift`, analytics toggle in Settings. |
+   | Onboarding | Remove `OnboardingView.swift` and the first-launch trigger in `AppDelegate`. |
+   | Accessibility gate | Remove `AccessibilityChecker.swift` and references in `ContentView`/`OnboardingView`. |
+   | File logging | Remove `FileLog.swift` and all call sites (replace with `os.Logger` only). |
+   | Localization | Remove `Localizable.xcstrings`, `InfoPlist.xcstrings`, `LocalizationManager.swift`. Strip `String(localized:)` calls back to bare strings. Remove `knownRegions` from `project.yml`. |
+   | Launch at Login | Remove `LaunchAtLoginManager.swift` and toggle in Settings. |
+   | Settings window | Remove `SettingsView.swift` and `Settings { ... }` scene. |
+   | SwiftLint | Delete `.swiftlint.yml`. |
+   | Unit tests | Delete `MacOSAppStarterTests/` and remove from `project.yml`. |
+   | Homebrew Cask | Delete `Casks/`. |
+   | CI/CD | Delete `.github/workflows/build.yml`. |
+
+   For things the user opted *in* to that aren't in the template (e.g. App Sandbox, Background Helper, GRDB), fall back to the templates in `## File Templates` below — generate just those pieces.
+
+4. **Regenerate the Xcode project** — `xcodegen generate`. Then build to verify nothing was broken by the rename: `xcodebuild -scheme <AppName> -destination 'platform=macOS' build`.
+
+5. **Sparkle keys, Aptabase key, Apple Developer secrets** — same as the from-scratch path. The template ships placeholders; tell the user which to replace.
+
+6. **Re-init git** if the user wants a clean history: `rm -rf .git && git init && git add . && git commit -m "Initial commit (from macos-app-starter template)"`.
+
+### When NOT to use Path A
+
+If the user's choice mix differs significantly from the template (Step 0 lists the exact flavor), recommend Path B instead — the template-deletion overhead may exceed the cost of generating the matching set from scratch. Rough rule: if 5+ of the template's choices are wrong for the user, prefer Path B.
+
+---
+
+## Generation Path B: From Scratch
+
+Use this when the user picked **B** in Step 0. The rest of this document — the existing `Generation Rules`, `File Templates`, and `Background Helper Templates` sections — describes Path B.
 
 ## Generation Rules
 
@@ -134,6 +252,16 @@ Print a summary:
    - `open <AppName>.xcodeproj` then Cmd+R
    - List GitHub secrets to configure (if CI/CD + Apple account)
    - Remind to push with `git push -u origin main && git push --tags`
+3. **Cask validation** (only if Homebrew Cask was generated):
+   - `brew style ./Casks/<name>.rb` — style check
+   - `brew audit --cask --online <tap-ref>` — full audit (online checks fetch
+     URLs, run livecheck, validate sha256). The `<tap-ref>` is whatever the
+     install command uses (e.g., `<owner>/tap/<name>` for shared tap).
+   - For topology C only, also run `brew audit --cask --new --online <tap-ref>`.
+     The `--new` flag enforces the homebrew/cask main rules (popularity,
+     `verified:` placement, etc.) and should be ignored for personal taps —
+     they don't apply there.
+   - For topology A/B, after pushing the cask repo: `brew tap <owner>/<short>` then `brew install --cask <full-ref>` to verify end-to-end.
 
 ---
 
@@ -884,7 +1012,64 @@ jobs:
 
 If the user does NOT have an Apple Developer Account, remove all steps that have `if: env.HAS_APPLE_SECRETS == 'true'` and the `HAS_APPLE_SECRETS` env var. Keep only: checkout, setup, build, create DMG (unsigned), upload artifact, and release.
 
-If Homebrew Cask is selected, add a step that updates the cask formula file.
+If Homebrew Cask is selected, append the cask-bump step below. It runs only
+on tag pushes, after the GitHub Release is created (so the DMG URL resolves
+and `sha256` matches). Skip this entirely for `cask_topology = template_only`.
+
+The step pushes directly to the tap repo. For `cask_topology`:
+- **A (shared_tap)**: target repo is `{{tap_owner}}/{{tap_repo_name}}`, file path `Casks/{{appname-lowercase}}.rb`.
+- **B (per_app_tap)**: target repo is `{{tap_owner}}/homebrew-{{appname-lowercase}}`, file path `Casks/{{appname-lowercase}}.rb`.
+- **C (homebrew_cask)**: do NOT auto-push to `Homebrew/homebrew-cask` (PR-only flow). Instead, comment in the workflow: `# After release, run: brew bump-cask-pr {{appname-lowercase}} --version <new>` so the user opens a PR by hand.
+
+Required GitHub secret: `HOMEBREW_TAP_TOKEN` — a fine-grained PAT with
+`Contents: Read and write` scope on the tap repo only. Do NOT reuse `GITHUB_TOKEN`;
+it's scoped to the current repo and cannot push to the tap.
+
+```yaml
+      - name: Update Homebrew cask in tap repo
+        if: startsWith(github.ref, 'refs/tags/v') && env.HAS_APPLE_SECRETS == 'true'
+        env:
+          TAP_REPO: {{tap_owner}}/{{tap_repo_name}}        # e.g. XueshiQiao/homebrew-tap
+          CASK_PATH: Casks/{{appname-lowercase}}.rb
+          TAP_TOKEN: ${{"{{"}} secrets.HOMEBREW_TAP_TOKEN {{"}}"}}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TAP_TOKEN" ]]; then
+            echo "::warning::HOMEBREW_TAP_TOKEN not set — skipping cask update."
+            exit 0
+          fi
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_PATH="$APP_NAME.dmg"
+          SHA256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+
+          WORK="$RUNNER_TEMP/tap"
+          git clone --depth=1 "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" "$WORK"
+          cd "$WORK"
+
+          # Bump version + sha256. Use perl (not sed -i) for portable in-place edit.
+          perl -i -pe 's/^(\s*version\s+)"[^"]*"/$1"'"$VERSION"'"/' "$CASK_PATH"
+          perl -i -pe 's/^(\s*sha256\s+)"[^"]*"/$1"'"$SHA256"'"/' "$CASK_PATH"
+
+          if git diff --quiet; then
+            echo "Cask already up-to-date at $VERSION."
+            exit 0
+          fi
+
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -am "Update {{appname-lowercase}} to $VERSION"
+          git push origin HEAD:main
+```
+
+Notes for whoever maintains this:
+- `perl -i` is used over `sed -i` because `sed -i` syntax differs between
+  GNU and BSD/macOS. The runner is macOS, so this matters.
+- The commit message format matches what `brew bump-cask-pr` produces, so
+  anyone later switching to PR-flow gets consistent history.
+- For topology B, the user must `gh repo create` the tap repo before the first
+  tag push; otherwise the clone step fails. Document this in the post-generation
+  summary's "Next steps".
 
 ### Release Notes Languages
 
@@ -905,7 +1090,16 @@ And add to `AGENTS.md` a convention:
 
 ### Homebrew Cask (if selected)
 
-File: `Casks/{{appname-lowercase}}.rb`
+**Where the file goes** depends on `cask_topology` from Step 4a:
+
+| `cask_topology`  | Path the skill writes |
+|---|---|
+| `shared_tap` (A) | The skill canNOT write to a sibling repo on disk. Print the cask body and instruct: "Save this as `Casks/{{appname-lowercase}}.rb` in your `{{tap_owner}}/{{tap_repo_name}}` repo and push." |
+| `per_app_tap` (B) | Scaffold a sibling repo skeleton at `../homebrew-{{appname-lowercase}}/` containing `Casks/{{appname-lowercase}}.rb`, a minimal `README.md`, and `.gitignore`. Tell the user to `cd ../homebrew-{{appname-lowercase}} && gh repo create {{tap_owner}}/homebrew-{{appname-lowercase}} --public --source=. --push`. |
+| `homebrew_cask` (C) | Write to `Casks/{{appname-lowercase}}.rb` in the app repo as a working draft, plus a `HOMEBREW_CASK_PR_CHECKLIST.md` (see below). The user copies the cask into a `homebrew-cask` fork to open the PR. |
+| `template_only` (D) | Write to `Casks/{{appname-lowercase}}.rb` in the app repo with a comment header marking it as a draft. README must reflect that this is not yet installable. |
+
+**Template** (used in all four cases — the only difference is where it lands):
 
 ```ruby
 cask "{{appname-lowercase}}" do
@@ -913,18 +1107,78 @@ cask "{{appname-lowercase}}" do
   sha256 ""
 
   url "https://github.com/{{GitHubOwner}}/{{GitHubRepo}}/releases/download/v#{version}/{{AppName}}.dmg"
+  # Add `verified:` ONLY when url's host differs from homepage's host (current
+  # audit rule). Both this template's url and homepage point at github.com, so
+  # `verified:` here is unnecessary and will be flagged by `brew audit`. If you
+  # later host the DMG on a different domain, add e.g.:
+  #   verified: "github.com/{{GitHubOwner}}/{{GitHubRepo}}/"
   name "{{AppName}}"
+  desc "{{one-line description, ≤80 chars, no trailing period, no app name}}"
   homepage "https://github.com/{{GitHubOwner}}/{{GitHubRepo}}"
+
+  # --- livecheck block: emit ONE of the two variants below ---
+  # If auto_update_mechanism == "sparkle": use the :sparkle variant. The url
+  # MUST point at the actual appcast feed configured in Info.plist's
+  # SUFeedURL — do NOT invent a URL. If you don't know it, fall back to
+  # :github_latest and leave a TODO comment instructing the user to
+  # update both SUFeedURL and this livecheck url to the real feed.
+  # If auto_update_mechanism == "github" or "none": use the :github_latest variant.
+
+  # Variant A — Sparkle:
+  livecheck do
+    url "{{appcast-feed-url-from-SUFeedURL-or-TODO}}"
+    strategy :sparkle
+  end
+
+  # Variant B — GitHub releases:
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  # --- auto_updates: include ONLY when auto_update_mechanism != "none" ---
+  # Tells brew not to fight with the app's self-update. Required for Sparkle
+  # apps and for any app that polls GitHub Releases internally.
+  auto_updates true
+
+  # depends_on macos: comes from the deployment target (e.g. macOS 14 → :sonoma).
+  # Map: 12→:monterey, 13→:ventura, 14→:sonoma, 15→:sequoia, 26→:tahoe.
+  depends_on macos: ">= :{{deployment_target_codename}}"
 
   app "{{AppName}}.app"
 
   zap trash: [
     "~/Library/Preferences/{{BundleID}}.plist",
     "~/Library/Application Support/{{AppName}}",
+    "~/Library/Caches/{{BundleID}}",
+    "~/Library/HTTPStorages/{{BundleID}}",
+    "~/Library/Saved Application State/{{BundleID}}.savedState",
     "~/Library/Logs/{{AppName}}.log",
   ]
 end
 ```
+
+**For topology B (`per_app_tap`)**, also create the sibling repo skeleton:
+
+`../homebrew-{{appname-lowercase}}/README.md`:
+```markdown
+# {{tap_owner}}/homebrew-{{appname-lowercase}}
+
+Homebrew tap for [{{AppName}}](https://github.com/{{GitHubOwner}}/{{GitHubRepo}}).
+
+## Install
+
+```bash
+brew install --cask {{tap_owner}}/{{appname-lowercase}}/{{appname-lowercase}}
+```
+```
+
+`../homebrew-{{appname-lowercase}}/.gitignore`:
+```
+.DS_Store
+```
+
+**For topology C (`homebrew_cask`)**, also create `HOMEBREW_CASK_PR_CHECKLIST.md` at project root listing: signed + notarized release present, livecheck verified with `brew livecheck --cask Casks/{{appname-lowercase}}.rb`, `brew audit --cask --online --new Casks/{{appname-lowercase}}.rb` clean, fork `Homebrew/homebrew-cask`, copy the file to `Casks/{{first-letter}}/{{appname-lowercase}}.rb` (note the alphabetized subdirectory), open PR titled `Add {{appname-lowercase}} <version>`.
 
 ### LICENSE
 
@@ -959,8 +1213,19 @@ Download the latest `.dmg` from [Releases](https://github.com/{{GitHubOwner}}/{{
 
 ### Homebrew (if cask is generated)
 
+Render the install command according to `cask_topology`:
+
+- **A) shared_tap**: `brew install --cask {{tap_owner}}/tap/{{appname-lowercase}}`
+  (assumes `tap_repo_name` = `homebrew-tap`; brew auto-prepends the
+  `homebrew-` prefix from the second segment, so users type `tap`, not the full repo name)
+- **B) per_app_tap**: `brew install --cask {{tap_owner}}/{{appname-lowercase}}/{{appname-lowercase}}`
+- **C) homebrew_cask** (after PR is merged): `brew install --cask {{appname-lowercase}}`
+- **D) template_only**: omit this section entirely, OR include it with a
+  prominent note: `<!-- Cask template generated but not yet published. The bare
+  command below requires homebrew/cask submission; see Casks/{{appname-lowercase}}.rb. -->`
+
 ```bash
-brew install --cask {{appname-lowercase}}
+brew install --cask {{rendered-from-topology}}
 ```
 
 ## Build from Source
@@ -1174,23 +1439,120 @@ Add to AppDelegate: check `UserDefaults.standard.bool(forKey: "hasCompletedOnboa
 
 ### Localization (if selected)
 
-If using `Localizable.xcstrings` (modern Xcode 15+ format), create the file with base language entries. Add each selected language to the `project.yml` settings:
+The modern stack (Xcode 15+) uses **String Catalogs** (`.xcstrings`). They auto-extract strings from `String(localized:)` calls at build time and provide a UI for translation. Prefer them over legacy `.strings`/`.stringsdict`.
+
+**1. project.yml additions:**
 
 ```yaml
 settings:
   base:
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
-```
+    DEVELOPMENT_LANGUAGE: en           # or whatever the base language is
+    SWIFT_EMIT_LOC_STRINGS: YES        # auto-extract String(localized:) at build time
 
-Add `Resources` to the sources list in `project.yml`:
-```yaml
+# All selected languages must appear in `knownRegions` so Xcode picks them up.
+# These are BCP-47 codes: en, zh-Hans, zh-Hant, ja, ko, de, fr, es, pt-BR, ...
+options:
+  knownRegions:
+    - en
+    - {{Language2}}                    # e.g. zh-Hans
+    - Base                             # required by Xcode for resource loading
+
 sources:
   - path: {{AppName}}/Sources
   - path: {{AppName}}/Assets.xcassets
   - path: {{AppName}}/Resources
 ```
 
-Create `{{AppName}}/Resources/Localizable.xcstrings` with base entries for any UI strings in the generated files.
+**2. `{{AppName}}/Resources/Localizable.xcstrings`** — one file with all UI strings. Skeleton:
+
+```json
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en"      : { "stringUnit" : { "state" : "translated", "value" : "Settings" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
+```
+
+After the first build with `SWIFT_EMIT_LOC_STRINGS: YES`, Xcode auto-fills new strings from `String(localized:)` calls. The skill should seed the file with strings for every UI string in generated Swift files (Settings, Onboarding, menu items, etc.).
+
+**3. `{{AppName}}/Resources/InfoPlist.xcstrings`** — separate catalog for plist values like `CFBundleDisplayName`, `CFBundleName`, menu bar status item title. Required when you want the app's display name to be localized:
+
+```json
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "localizations" : {
+        "en"      : { "stringUnit" : { "state" : "translated", "value" : "{{AppName}}" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "{{ChineseAppName}}" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}
+```
+
+In Info.plist (or via XcodeGen `infoPlist:`), set `CFBundleDisplayName` to `$(CFBundleDisplayName)` so it's resolved from the catalog.
+
+**4. Swift usage:**
+
+```swift
+// Preferred — String Catalogs auto-extract these.
+Text("Settings")                                    // SwiftUI: implicit localization
+let title = String(localized: "Welcome")            // explicit
+let n = String(localized: "\(count) items")         // interpolation works
+
+// Avoid: NSLocalizedString (older API; still works but not auto-extracted as cleanly)
+// Avoid: bare String literals shown in UI without going through String(localized:)
+```
+
+**5. Runtime language switch (optional but common UX).** macOS apps inherit system language by default; many users want an in-app language picker. Provide a helper:
+
+```swift
+// {{AppName}}/Sources/LocalizationManager.swift
+import Foundation
+import SwiftUI
+
+@MainActor
+final class LocalizationManager: ObservableObject {
+    static let shared = LocalizationManager()
+
+    @AppStorage("app.language") var languageCode: String = "" {
+        didSet { applyLanguage() }
+    }
+
+    private init() { applyLanguage() }
+
+    private func applyLanguage() {
+        // Empty string = follow system. Non-empty = override via AppleLanguages.
+        if languageCode.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        } else {
+            UserDefaults.standard.set([languageCode], forKey: "AppleLanguages")
+        }
+        // Note: system-resolved Bundle.main strings only update on next launch.
+        // For instant switching, observe `objectWillChange` and key SwiftUI views by `languageCode`.
+        objectWillChange.send()
+    }
+}
+```
+
+Then key the root view by `localizationManager.languageCode` (`.id(...)` in SwiftUI) so the view tree rebuilds on switch — strings re-resolve through `String(localized:)`'s lookup chain.
+
+**6. AGENTS.md convention** — add this so future code stays localizable:
+
+> All UI strings must go through `String(localized:)` (or SwiftUI implicit `Text("...")`). Never use bare `String` literals for text shown to users. New strings appear automatically in `Localizable.xcstrings` after build; translate non-English entries before merging.
+
+**7. Release notes** — when multiple languages are configured, the release notes template (see "Release Notes Languages" above) should have a section per language so changelog text matches what Sparkle (or the user) shows.
 
 ---
 

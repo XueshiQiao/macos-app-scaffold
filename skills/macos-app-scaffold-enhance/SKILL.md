@@ -294,8 +294,10 @@ Read each template's `README.md` before copying.
 
 ### Feature: Localization
 
-**Adds:** `Localizable.xcstrings` or `.strings` files.
-**Modifies:** `project.yml` to add Resources path and localization settings.
+**Adds:** `Localizable.xcstrings` (and `InfoPlist.xcstrings` for display name), plus `LocalizationManager.swift` for runtime language switch.
+**Modifies:** `project.yml` to add `Resources/` path, `LOCALIZATION_PREFERS_STRING_CATALOGS: YES`, `SWIFT_EMIT_LOC_STRINGS: YES`, `DEVELOPMENT_LANGUAGE`, and `knownRegions` (must include all selected languages plus `Base`). `AGENTS.md` to add the "no bare UI string literals" convention.
+
+See `macos-app-scaffold-new/SKILL.md` "Localization (if selected)" section for the full template — same xcstrings JSON shape, same project.yml settings, same `LocalizationManager` helper, same AGENTS.md text. Follow the same approach when enhancing.
 
 Ask: Which languages? (always includes English)
 
@@ -330,11 +332,36 @@ Ask: Which languages? (always includes English)
 
 ### Feature: Homebrew Cask
 
-**Adds:** `Casks/{{appname}}.rb`
+**Adds:** A working cask `.rb` file at the chosen tap location, plus (for
+topology B) a sibling tap repo skeleton, plus (for topology C) a PR checklist.
 
-- Detect GitHub remote for download URL
-- Read version from project.yml
-- Generate cask formula template
+Detect first, then ask:
+- Detect GitHub remote (`git remote get-url origin`) → owner/repo for the URL.
+- Read version from `project.yml` (`MARKETING_VERSION` or top-level `version`).
+- Read deployment target from `project.yml` (`DEPLOYMENT_TARGET` /
+  `MACOSX_DEPLOYMENT_TARGET`) → maps to `depends_on macos:` codename.
+- Detect auto-update mechanism: presence of `Sparkle` SPM dep, or an
+  `appcast.xml` file → Sparkle; else look for any GitHub-release polling code
+  → `:github_latest`; else default to `:github_latest` for livecheck and omit
+  `auto_updates true`.
+
+Then ask the **tap-topology question** — same four options as the new-app
+skill (see `macos-app-scaffold-new/SKILL.md` Step 4a). Default to A if the
+user mentions an existing tap, otherwise B. Capture `cask_topology`,
+`tap_owner`, `tap_repo_name`.
+
+Generate using the template in `macos-app-scaffold-new/SKILL.md` "Homebrew
+Cask (if selected)" — same fields (`desc`, `livecheck`, `auto_updates`,
+`depends_on`, expanded `zap`), same per-topology destination logic.
+
+If the project has a CI workflow (`.github/workflows/*.yml`) AND topology is
+A or B, also append the cask-bump step described in the new-app skill (search
+for `Update Homebrew cask in tap repo`). Tell the user to add the
+`HOMEBREW_TAP_TOKEN` secret. Do not append the step for C or D.
+
+After writing files, run validation: `brew style ./Casks/<name>.rb`. Report
+the result. Defer `brew audit --cask --online` to the user since it requires
+the cask to be reachable via a tap.
 
 ### Feature: README.md
 
