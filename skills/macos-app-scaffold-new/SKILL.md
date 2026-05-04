@@ -168,8 +168,11 @@ Use this when the user picked **A** in Step 0. This is dramatically cheaper in t
    - `MacOSAppStarter` → `<AppName>`
    - `dev.xueshi.macos-app-starter` → `<BundleID>`
    - `macosappstarter` (lowercase, in cask file) → `<appname-lowercase>`
-   - `XueshiQiao` → user's GitHub owner (in README badges, AGENTS.md, cask file URL)
+   - `XueshiQiao` → user's GitHub owner (in README badges, AGENTS.md, cask file URL, and project.yml's `SUFeedURL`)
+   - `macos-app-starter` → user's repo name (in `SUFeedURL` and any GitHub-Releases-asset URLs in workflow)
    - Update `LICENSE` copyright holder
+
+   **About `SUFeedURL`**: the template ships with `https://github.com/XueshiQiao/macos-app-starter/releases/latest/download/appcast.xml` because GitHub permanently redirects `releases/latest/download/<asset>` to the asset on the most recent release — no GitHub Pages, no separate hosting. The CI workflow uploads `appcast.xml` alongside the DMG on every tagged release, so this URL stays correct without intervention. After fork-and-rename, the only thing that changes is the owner/repo path segments. Do NOT swap to a github.io URL unless you actually intend to set up Pages.
 
    Files to touch (all done with `Edit`):
    - `project.yml`
@@ -1118,10 +1121,13 @@ cask "{{appname-lowercase}}" do
 
   # --- livecheck block: emit ONE of the two variants below ---
   # If auto_update_mechanism == "sparkle": use the :sparkle variant. The url
-  # MUST point at the actual appcast feed configured in Info.plist's
-  # SUFeedURL — do NOT invent a URL. If you don't know it, fall back to
-  # :github_latest and leave a TODO comment instructing the user to
-  # update both SUFeedURL and this livecheck url to the real feed.
+  # MUST match SUFeedURL in Info.plist. The recommended pattern is to host
+  # the appcast as a GitHub Release asset:
+  #   https://github.com/<owner>/<repo>/releases/latest/download/appcast.xml
+  # so this livecheck url and the SUFeedURL are identical. Do NOT swap to
+  # a guessed github.io URL — Pages is not on by default, and users without
+  # Pages set up will get 404s. If the user has set up Pages explicitly, then
+  # use their actual hosted URL.
   # If auto_update_mechanism == "github" or "none": use the :github_latest variant.
 
   # Variant A — Sparkle:
