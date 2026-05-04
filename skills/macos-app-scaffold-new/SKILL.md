@@ -172,7 +172,11 @@ Use this when the user picked **A** in Step 0. This is dramatically cheaper in t
    - `macos-app-starter` → user's repo name (in `SUFeedURL` and any GitHub-Releases-asset URLs in workflow)
    - Update `LICENSE` copyright holder
 
-   **About `SUFeedURL`**: the template ships with `https://github.com/XueshiQiao/macos-app-starter/releases/latest/download/appcast.xml` because GitHub permanently redirects `releases/latest/download/<asset>` to the asset on the most recent release — no GitHub Pages, no separate hosting. The CI workflow uploads `appcast.xml` alongside the DMG on every tagged release, so this URL stays correct without intervention. After fork-and-rename, the only thing that changes is the owner/repo path segments. Do NOT swap to a github.io URL unless you actually intend to set up Pages.
+   **About `SUFeedURL`**: the template ships with the raw GitHub URL pattern (`https://raw.githubusercontent.com/<owner>/<repo>/main/appcast.xml`). CI generates `appcast.xml` on every tagged release and commits it back to `main` with `[skip ci]`. This matches the production pattern in AnyDrag, PastePawX, HyperCapsLock. Do NOT swap to a github.io URL unless Pages is actually set up — that's the failure mode that broke the first version of this template.
+
+   **Sparkle keypair MUST be regenerated.** The template ships with `SUPublicEDKey` matching a throwaway private key stored as the template repo's `SPARKLE_EDDSA_KEY` secret. Forks that don't regenerate are accepting updates signed by anyone who can read the template repo's secret history — bad. The README's "Setup before you ship" step covers the regeneration commands.
+
+   **Aptabase key MUST be replaced.** The template ships with the maintainer's real Aptabase key (`A-US-3800930688`) so events flow to a known dashboard during template development. Forks that don't replace it will leak their users' app-launch events into the maintainer's project.
 
    Files to touch (all done with `Edit`):
    - `project.yml`
