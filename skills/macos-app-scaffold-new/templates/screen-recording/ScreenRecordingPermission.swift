@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreGraphics
 
 /// Manages the `kTCCServiceScreenCapture` permission with the one invariant

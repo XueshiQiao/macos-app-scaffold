@@ -74,21 +74,26 @@ not re-prompted because the OS has no record of this "new" app.
 
 ### Fix: stable signing identity for debug builds
 
-Scope the override to the Debug config only — putting it under
-`settings.base` would poison Release signing, which CI handles separately
-(Developer ID, notarization, etc.).
+`CODE_SIGN_IDENTITY` is what TCC keys decisions on, so that one MUST be
+scoped to Debug only — putting `CODE_SIGN_IDENTITY: "Apple Development"`
+under `settings.base` would override the Developer ID identity that CI uses
+for Release builds (notarized distribution). `DEVELOPMENT_TEAM` and
+`CODE_SIGN_STYLE` are safe to keep in `base` because the same team is
+used for both configs, and CI overrides `CODE_SIGN_IDENTITY` at build
+time per its own logic.
 
 In `project.yml`:
 
 ```yaml
 settings:
   base:
-    DEVELOPMENT_TEAM: ABCDE12345                   # your Apple Developer team
+    DEVELOPMENT_TEAM: ABCDE12345                   # same team for Debug and Release
     CODE_SIGN_STYLE: Automatic
   configs:
     Debug:
-      CODE_SIGN_IDENTITY: "Apple Development"      # NOT "-" (ad-hoc)
-    # Release: leave alone — CI handles signing with Developer ID
+      CODE_SIGN_IDENTITY: "Apple Development"      # NOT "-" (ad-hoc) — TCC needs a stable identity
+    # Release: do NOT set CODE_SIGN_IDENTITY here. CI overrides it with the
+    # Developer ID signing identity at build time (see .github/workflows/build.yml).
 ```
 
 This keeps the Debug designated requirement stable across rebuilds, so the
@@ -123,7 +128,7 @@ Other useful service names: `Accessibility`, `Microphone`, `Camera`.
 
    var body: some View {
        Button("Take Screenshot") {
-           if ScreenRecordingPermission.shared.status == .granted {
+           if ScreenRecordingPermission.shared.isReadyForCapture {
                Task { await captureScreen() }
            } else {
                showsPermissionPrompt = true
@@ -174,7 +179,7 @@ Other useful service names: `Accessibility`, `Microphone`, `Camera`.
 | "I'll just add `NSScreenRecordingUsageDescription` to Info.plist" | It does nothing for this API. The OS dialog uses `CFBundleDisplayName`. |
 | "Ad-hoc signing is fine for debug" | Each ad-hoc build is a different app to TCC. You will re-grant constantly and chase ghosts. |
 | "I'll piggyback on the Accessibility gate flow" | Different TCC service, different first-grant semantics. Build a separate flow. |
-| "I can simplify the manager by dropping `preflightAtLaunch`" | That field is the only signal that distinguishes `granted` from `grantedPendingRelaunch`. Removing it silently breaks the relaunch invariant. |
+| "I can simplify the manager by dropping `hasObservedFalse`" | That sticky bit is the only signal that distinguishes `granted` from `grantedPendingRelaunch`. Removing it silently breaks the relaunch invariant. |
 | "I'll gate calls on `status != .notGranted`" | That lets `.grantedPendingRelaunch` through and you get silent ScreenCaptureKit failures. Gate on `isReadyForCapture`. |
 
 ## Red flags — STOP and rethink
@@ -182,4 +187,4 @@ Other useful service names: `Accessibility`, `Microphone`, `Camera`.
 - You're polling `SCShareableContent` and waiting for it to "wake up" → you need a relaunch, not more polling.
 - You added `NSScreenRecordingUsageDescription` to Info.plist → delete it; it's not consulted.
 - Your debug `CODE_SIGN_IDENTITY` is `-` and your toggle "keeps disappearing" → the rebuilds are wiping TCC. Switch to Apple Development.
-- You're requesting in `applicationDidFinishLaunching` and immediately calling `SCShareableContent` → on first grant this is the textbook bug. Gate on `.granted` only.
+- You're requesting in `applicationDidFinishLaunching` and immediately calling `SCShareableContent` → on first grant this is the textbook bug. Gate on `isReadyForCapture` only.
