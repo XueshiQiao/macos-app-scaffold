@@ -101,6 +101,7 @@ Present as a checklist. User can accept defaults or customize:
 | Unit test target | **Yes** | XCTest skeleton with one example test |
 | Launch at Login | **Yes** if menu bar archetype, **No** otherwise | Uses `SMAppService` |
 | Accessibility permission gate | **No** | Startup permission check + prompt (for apps using CGEvent tap, AXUIElement, etc.) |
+| Screen Recording permission flow | **No** | For apps using ScreenCaptureKit (`SCShareableContent`, `SCStream`). Generates `ScreenRecordingPermission.swift` + a 3-state modal (`ScreenRecordingPromptView.swift`) that handles the **mandatory relaunch on first grant**. NOT a substitute for the Accessibility gate — first-grant semantics differ. |
 | Localization | **No** | If yes, ask which languages (always includes English). Generates `Localizable.xcstrings` or `.strings`. |
 | File-based logging | **Yes** | `~/Library/Logs/<AppName>.log` with lightweight FileLog class |
 | Settings/Preferences window | **Yes** | SwiftUI `Settings` scene scaffold |
@@ -200,6 +201,7 @@ Use this when the user picked **A** in Step 0. This is dramatically cheaper in t
    | Aptabase | Remove SPM dep, `Analytics.swift`, analytics toggle in Settings. |
    | Onboarding | Remove `OnboardingView.swift` and the first-launch trigger in `AppDelegate`. |
    | Accessibility gate | Remove `AccessibilityChecker.swift` and references in `ContentView`/`OnboardingView`. |
+   | Screen Recording permission | Remove `ScreenRecordingChecker.swift` (or `ScreenRecordingPermission.swift`) and any `SCShareableContent` / `SCStream` / `SCScreenshotManager` call sites. Drop the `import ScreenCaptureKit` line. |
    | File logging | Remove `FileLog.swift` and all call sites (replace with `os.Logger` only). |
    | Localization | Remove `Localizable.xcstrings`, `InfoPlist.xcstrings`, `LocalizationManager.swift`. Strip `String(localized:)` calls back to bare strings. Remove `knownRegions` from `project.yml`. |
    | Launch at Login | Remove `LaunchAtLoginManager.swift` and toggle in Settings. |
@@ -644,6 +646,44 @@ final class PermissionManager {
     }
 }
 ```
+
+#### ScreenRecordingPermission.swift + ScreenRecordingPromptView.swift (if Screen Recording flow)
+
+Use the templates in
+`skills/macos-app-scaffold-new/templates/screen-recording/` —
+`ScreenRecordingPermission.swift`, `ScreenRecordingPromptView.swift`, and a
+`README.md` documenting the gotchas. Read the README before generating.
+
+The single non-negotiable invariant the manager encodes: on first grant,
+ScreenCaptureKit (`SCShareableContent`, `SCStream`, `SCScreenshotManager`)
+will NOT start working in the same process. The user MUST quit and relaunch.
+Do not write a flow that polls `SCShareableContent` after grant — it does
+not work, and "polling longer" does not fix it.
+
+The manager exposes three states — `notGranted`, `grantedPendingRelaunch`,
+`granted` — which the prompt view maps to three branches: explain → "Open
+Settings" → poll → "Relaunch Now". Wire `ScreenRecordingPromptView` as a
+`.sheet(isPresented:)` from any feature entry point that needs screen
+capture. Gate all ScreenCaptureKit calls on `.granted` only.
+
+When generating, also add this to the project's debug config:
+
+```yaml
+# project.yml
+configs:
+  Debug: debug
+settings:
+  configs:
+    Debug:
+      CODE_SIGN_IDENTITY: "Apple Development"   # NOT "-" (ad-hoc)
+      DEVELOPMENT_TEAM: <user's Team ID>
+```
+
+Reason: ad-hoc / changing-identity rebuilds wipe the TCC entry silently,
+which is the dev-loop bug that costs everyone a day the first time.
+
+Do NOT add `NSScreenRecordingUsageDescription` to Info.plist. It is not
+consulted by this API.
 
 #### FileLog.swift (if file-based logging)
 

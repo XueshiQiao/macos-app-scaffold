@@ -30,6 +30,7 @@
 - 开机自启（`SMAppService.mainApp`）
 - 后台 Helper + XPC（`SMAppService.agent` 用户态 或 `.daemon` 特权 — 详见下表）
 - 辅助功能权限引导
+- 屏幕录制权限流程（ScreenCaptureKit，首次授权后自动重启的完整处理）
 - 设置 / 偏好设置窗口
 - 文件日志（`~/Library/Logs/<AppName>.log`）
 - 本地化（多语言）

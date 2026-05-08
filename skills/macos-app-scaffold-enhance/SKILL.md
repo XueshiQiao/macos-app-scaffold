@@ -69,14 +69,15 @@ Present a clear dashboard of what exists vs what can be added:
  4. Unit test target
  5. Launch at Login
  6. Accessibility permission gate
- 7. Localization
- 8. Settings/Preferences window
- 9. Analytics (Aptabase)
- 10. Onboarding/Welcome window
- 11. Homebrew Cask formula
- 12. README.md with badges
- 13. License file
- 14. AGENTS.md + CLAUDE.md symlink
+ 7. Screen Recording permission flow
+ 8. Localization
+ 9. Settings/Preferences window
+ 10. Analytics (Aptabase)
+ 11. Onboarding/Welcome window
+ 12. Homebrew Cask formula
+ 13. README.md with badges
+ 14. License file
+ 15. AGENTS.md + CLAUDE.md symlink
 
 Which features would you like to add? (comma-separated numbers, or "all")
 ```
@@ -292,6 +293,56 @@ Read each template's `README.md` before copying.
 - Read existing AppDelegate to find the right insertion point
 - Add `AXIsProcessTrustedWithOptions` check
 
+### Feature: Screen Recording Permission
+
+> **Do not bundle this with the Accessibility gate.** They look similar but
+> the first-grant semantics are fundamentally different. ScreenCaptureKit
+> requires a **full app relaunch** after first grant — Accessibility does not.
+> An inline-style flow that polls `SCShareableContent` after grant is the
+> single most common bug in this corner of the API.
+
+**Adds:**
+- `Sources/ScreenRecordingPermission.swift` — manager with the relaunch invariant encoded in its `Status` enum (`notGranted` / `grantedPendingRelaunch` / `granted`)
+- `Sources/ScreenRecordingPromptView.swift` — three-state SwiftUI modal: explain → "Open Settings" → poll → "Relaunch Now"
+
+**Templates location.** `../macos-app-scaffold-new/templates/screen-recording/`
+(repo path: `skills/macos-app-scaffold-new/templates/screen-recording/`).
+Read its `README.md` before generating — it documents the dev-loop gotchas
+the templates exist to prevent.
+
+**Modifies:**
+- A Settings tab or feature entry point — present `ScreenRecordingPromptView` as a sheet when the user first reaches a feature that captures the screen
+- Any code that calls `SCShareableContent` / `SCStream` / `SCScreenshotManager` — must gate on `ScreenRecordingPermission.shared.isReadyForCapture` (NEVER on `status != .notGranted`, which lets `.grantedPendingRelaunch` through and produces silent failures)
+
+**Detect-and-replace:** if the project already contains a
+`ScreenRecordingChecker.swift` (an earlier version of `macos-app-starter`
+shipped one), replace it. That earlier file calls
+`CGRequestScreenCaptureAccess` and immediately uses `SCShareableContent`
+without any relaunch handling — the textbook bug this template exists to
+fix. Migrate call sites from `ScreenRecordingChecker.shared.isGranted` to
+`ScreenRecordingPermission.shared.isReadyForCapture`.
+
+**Placeholders to substitute:**
+- `{{AppName}}` — replace in `ScreenRecordingPromptView.swift` (UI string)
+
+**Tell the user about the dev-loop gotcha (mandatory):**
+
+1. Debug builds must use a stable signing identity. Set
+   `CODE_SIGN_IDENTITY: "Apple Development"` (NOT `-`) in `project.yml` for
+   the Debug config, and pin `DEVELOPMENT_TEAM`. Re-signing with a different
+   identity silently wipes the TCC entry, the System Settings toggle
+   disappears, and ScreenCaptureKit returns nothing — without any error.
+2. To reproduce the first-grant flow during testing:
+   `tccutil reset ScreenCapture <BundleID>`.
+3. Do NOT add `NSScreenRecordingUsageDescription` to Info.plist. It is not
+   consulted by this API; the system dialog uses `CFBundleDisplayName`.
+4. ScreenCaptureKit works under App Sandbox once TCC is granted — no
+   entitlement change is needed.
+
+**App Sandbox note:** Unlike Accessibility (which is incompatible with
+sandbox), Screen Recording works in sandboxed apps. Mention this if the user
+is on the App Store path.
+
 ### Feature: Localization
 
 **Adds:** `Localizable.xcstrings` (and `InfoPlist.xcstrings` for display name), plus `LocalizationManager.swift` for runtime language switch.
@@ -416,6 +467,7 @@ For argument-based invocation, accept these aliases:
 | `helper`, `agent`, `xpc-helper`, `background-helper` | Background Helper — User Agent |
 | `daemon`, `privileged-helper`, `root-helper` | Background Helper — Privileged Daemon |
 | `accessibility`, `a11y`, `permission` | Accessibility Gate |
+| `screen-recording`, `screencapture`, `sckit`, `screencapturekit` | Screen Recording Permission |
 | `localization`, `l10n`, `i18n` | Localization |
 | `settings`, `preferences`, `prefs` | Settings Window |
 | `analytics`, `aptabase` | Analytics |

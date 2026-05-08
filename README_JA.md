@@ -30,6 +30,7 @@ XcodeGen、GitHub Actions、SwiftUI、Apple 公証を使用した、実際にリ
 - ログイン時起動（`SMAppService.mainApp`）
 - バックグラウンド Helper + XPC（`SMAppService.agent` ユーザコンテキスト または `.daemon` 特権 — 下記の表を参照）
 - アクセシビリティ権限ゲート
+- 画面収録権限フロー（ScreenCaptureKit、初回許可時の再起動処理込み）
 - 設定 / 環境設定ウィンドウ
 - ファイルベースのログ（`~/Library/Logs/<AppName>.log`）
 - ローカライズ（多言語）

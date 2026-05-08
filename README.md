@@ -30,6 +30,7 @@ All features are interactive — you pick what you need, skip what you don't.
 - Launch at Login (`SMAppService.mainApp`)
 - Background helper with XPC (`SMAppService.agent` user-context, or `.daemon` privileged) — see table below
 - Accessibility permission gate
+- Screen Recording permission flow (ScreenCaptureKit, with first-grant relaunch handling)
 - Settings / Preferences window
 - File-based logging (`~/Library/Logs/<AppName>.log`)
 - Localization (multi-language)

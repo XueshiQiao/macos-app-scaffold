@@ -30,6 +30,7 @@ Alle Funktionen sind interaktiv — wähle, was du brauchst, überspringe den Re
 - Autostart (`SMAppService.mainApp`)
 - Background Helper mit XPC (`SMAppService.agent` im Benutzerkontext oder `.daemon` privilegiert — siehe Tabelle unten)
 - Barrierefreiheits-Berechtigungsgate
+- Bildschirmaufnahme-Berechtigungsfluss (ScreenCaptureKit, mit Neustart-Handling beim ersten Erteilen)
 - Einstellungen / Preferences Fenster
 - Datei-basiertes Logging (`~/Library/Logs/<AppName>.log`)
 - Lokalisierung (mehrsprachig)
