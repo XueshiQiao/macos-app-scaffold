@@ -35,18 +35,30 @@ final class ScreenRecordingPermission: ObservableObject {
     /// this property, NEVER on `status != .notGranted`.
     var isReadyForCapture: Bool { status == .granted }
 
-    /// Cached preflight value at process start. DO NOT REMOVE this field
-    /// "as a simplification" — it is the only signal that distinguishes
-    /// "granted in a previous launch (ScreenCaptureKit works)" from
-    /// "granted mid-session (ScreenCaptureKit will return nothing until
-    /// relaunch)". Without it, the relaunch invariant is silently broken.
-    private let preflightAtLaunch: Bool
+    /// Sticky bit that goes true the moment we ever observe preflight as
+    /// false in this process (including at process start). Once true, any
+    /// subsequent `true` reading is treated as `.grantedPendingRelaunch`,
+    /// not `.granted`. This handles two cases with a single flag:
+    ///   1. App launches without permission, user grants mid-session
+    ///      → flag is true from init → status reaches `.grantedPendingRelaunch`.
+    ///   2. App launches with permission, user revokes then re-grants in the
+    ///      same session → flag flips true on the revoke → status reaches
+    ///      `.grantedPendingRelaunch` after the re-grant. Defensive: TCC's
+    ///      grant-during-session behavior under revoke/regrant is not
+    ///      formally documented; treating it like first-grant is the safe
+    ///      assumption.
+    /// DO NOT REMOVE this field "as a simplification" — it is the only
+    /// signal that distinguishes "granted in a previous launch
+    /// (ScreenCaptureKit works)" from "granted mid-session (ScreenCaptureKit
+    /// will return nothing until relaunch)". Without it, the relaunch
+    /// invariant is silently broken.
+    private var hasObservedFalse: Bool
 
     private var pollTimer: Timer?
 
     private init() {
         let initial = CGPreflightScreenCaptureAccess()
-        self.preflightAtLaunch = initial
+        self.hasObservedFalse = !initial
         self.status = initial ? .granted : .notGranted
     }
 
@@ -54,8 +66,9 @@ final class ScreenRecordingPermission: ObservableObject {
     func refresh() {
         let now = CGPreflightScreenCaptureAccess()
         if now {
-            status = preflightAtLaunch ? .granted : .grantedPendingRelaunch
+            status = hasObservedFalse ? .grantedPendingRelaunch : .granted
         } else {
+            hasObservedFalse = true
             status = .notGranted
         }
     }
@@ -66,8 +79,9 @@ final class ScreenRecordingPermission: ObservableObject {
     func requestPermission() {
         let granted = CGRequestScreenCaptureAccess()
         if granted {
-            status = preflightAtLaunch ? .granted : .grantedPendingRelaunch
+            status = hasObservedFalse ? .grantedPendingRelaunch : .granted
         } else {
+            hasObservedFalse = true
             openSystemSettings()
             status = .notGranted
         }
@@ -78,6 +92,11 @@ final class ScreenRecordingPermission: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    /// Last error from `relaunch()`, if any. Surface this in your UI when
+    /// non-nil — the relaunch failed and the user is still in the original
+    /// process.
+    @Published private(set) var relaunchError: Error?
+
     /// Quit + relaunch via `NSWorkspace.openApplication`. Required after
     /// first grant for ScreenCaptureKit to begin working. Call from the
     /// `.grantedPendingRelaunch` branch of your modal.
@@ -85,15 +104,23 @@ final class ScreenRecordingPermission: ObservableObject {
     /// Uses `NSWorkspace.openApplication` (not `Process`/`open -n -a`) so
     /// this also works under App Sandbox. `createsNewApplicationInstance`
     /// forces a fresh process even if the OS still considers this one alive.
-    /// We terminate from the completion handler so the new instance is
-    /// already scheduled before we exit.
+    /// We terminate ONLY from the success branch of the completion handler:
+    /// if the launch failed (stale bundle path, sandbox launch denial,
+    /// missing on-disk app), terminating without a replacement would silently
+    /// quit the user with no app to come back to.
     func relaunch() {
+        relaunchError = nil
         let bundleURL = Bundle.main.bundleURL
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
 
-        NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration) { _, _ in
+        NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration) { [weak self] _, error in
             Task { @MainActor in
+                if let error = error {
+                    self?.relaunchError = error
+                    NSLog("ScreenRecordingPermission relaunch failed: \(error.localizedDescription). Not terminating; user can retry or quit manually.")
+                    return
+                }
                 NSApp.terminate(nil)
             }
         }

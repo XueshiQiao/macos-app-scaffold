@@ -74,22 +74,27 @@ not re-prompted because the OS has no record of this "new" app.
 
 ### Fix: stable signing identity for debug builds
 
+Scope the override to the Debug config only — putting it under
+`settings.base` would poison Release signing, which CI handles separately
+(Developer ID, notarization, etc.).
+
 In `project.yml`:
 
 ```yaml
-configs:
-  Debug: debug
 settings:
   base:
     DEVELOPMENT_TEAM: ABCDE12345                   # your Apple Developer team
-    CODE_SIGN_IDENTITY: "Apple Development"        # NOT "-" (ad-hoc)
     CODE_SIGN_STYLE: Automatic
+  configs:
+    Debug:
+      CODE_SIGN_IDENTITY: "Apple Development"      # NOT "-" (ad-hoc)
+    # Release: leave alone — CI handles signing with Developer ID
 ```
 
-This keeps the designated requirement stable across builds, so the TCC entry
-survives. If you absolutely must build unsigned (e.g. on CI where there is
-no developer cert), accept that the user will need to re-grant after each
-install — and document that in your QA runbook.
+This keeps the Debug designated requirement stable across rebuilds, so the
+TCC entry survives. If you absolutely must build unsigned (e.g. on CI
+without developer credentials), accept that the user will need to re-grant
+after each install — document that in your QA runbook.
 
 ### Reset commands for testing
 
@@ -132,10 +137,14 @@ Other useful service names: `Accessibility`, `Microphone`, `Camera`.
 
 3. Anywhere you actually call ScreenCaptureKit, gate on
    `isReadyForCapture` — never on `status != .notGranted` (which would
-   incorrectly let `.grantedPendingRelaunch` through and silently fail):
+   incorrectly let `.grantedPendingRelaunch` through and silently fail).
+   `ScreenRecordingPermission` is `@MainActor`, so reading from
+   non-isolated async code requires an explicit hop:
 
    ```swift
+   @MainActor
    func captureScreen() async throws -> CGImage {
+       // Same actor as ScreenRecordingPermission — no hop needed.
        guard ScreenRecordingPermission.shared.isReadyForCapture else {
            // Either .notGranted (need to ask) or .grantedPendingRelaunch
            // (need to restart). Trigger the modal instead of calling SCKit.
@@ -144,6 +153,13 @@ Other useful service names: `Accessibility`, `Microphone`, `Camera`.
        let content = try await SCShareableContent.current
        // ...
    }
+   ```
+
+   If your capture code can't be `@MainActor`-isolated, await the read
+   explicitly:
+   ```swift
+   let ready = await MainActor.run { ScreenRecordingPermission.shared.isReadyForCapture }
+   guard ready else { throw ScreenCaptureError.relaunchRequired }
    ```
 
 4. If your app is sandboxed, no entitlement change is needed — ScreenCaptureKit

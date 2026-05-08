@@ -664,7 +664,10 @@ The manager exposes three states — `notGranted`, `grantedPendingRelaunch`,
 `granted` — which the prompt view maps to three branches: explain → "Open
 Settings" → poll → "Relaunch Now". Wire `ScreenRecordingPromptView` as a
 `.sheet(isPresented:)` from any feature entry point that needs screen
-capture. Gate all ScreenCaptureKit calls on `.granted` only.
+capture. Gate all ScreenCaptureKit calls on
+`ScreenRecordingPermission.shared.isReadyForCapture` (the canonical
+helper) — never on `status != .notGranted`, which lets
+`.grantedPendingRelaunch` through and produces silent failures.
 
 When generating, also add this to the project's debug config:
 
