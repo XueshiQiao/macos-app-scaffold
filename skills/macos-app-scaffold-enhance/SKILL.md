@@ -164,8 +164,17 @@ For Sparkle:
     rm -f "$RUNNER_TEMP/sparkle_eddsa.key"
 
     ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
-    VERSION=$(grep MARKETING_VERSION project.yml | head -1 | awk -F'"' '{print $2}')
-    BUILD=$(grep CURRENT_PROJECT_VERSION project.yml | head -1 | awk -F'"' '{print $2}')
+    # Anchor the grep so it matches the SETTING line (MARKETING_VERSION: "1.2.3")
+    # and skips reference lines like CFBundleShortVersionString: $(MARKETING_VERSION).
+    # Without the anchor, `head -1` may pick a reference line that has no quotes
+    # and `awk -F'"' '{print $2}'` returns empty — silently producing an appcast
+    # with empty <sparkle:version>/<sparkle:shortVersionString>.
+    VERSION=$(grep -E '^\s*MARKETING_VERSION: ' project.yml | head -1 | awk -F'"' '{print $2}')
+    BUILD=$(grep -E '^\s*CURRENT_PROJECT_VERSION: ' project.yml | head -1 | awk -F'"' '{print $2}')
+    if [ -z "$VERSION" ] || [ -z "$BUILD" ]; then
+      echo "ERROR: failed to parse MARKETING_VERSION or CURRENT_PROJECT_VERSION from project.yml"
+      exit 1
+    fi
     FILE_LENGTH=$(stat -f%z "$APP_NAME.dmg")
     TAG="${GITHUB_REF_NAME}"
     DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${APP_NAME}.dmg"
