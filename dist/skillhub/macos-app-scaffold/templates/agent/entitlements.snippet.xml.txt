@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Helper entitlements. Save as {{HelperExecutableName}}.entitlements and
+    reference it from the helper target in project.yml.
+
+    For an unsandboxed agent, this can be empty (just <dict/>) — the helper
+    inherits the team identifier from its code signature, which is what
+    SMAppService uses to associate it with the host app.
+
+    If you need the SANDBOXED helper to talk to a sandboxed app via XPC, add
+    a shared App Group container instead and route data through there. Pure
+    Mach-service XPC across two sandboxes is constrained.
+-->
+<plist version="1.0">
+<dict>
+    <!-- Add as needed: -->
+    <!--
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+    -->
+</dict>
+</plist>

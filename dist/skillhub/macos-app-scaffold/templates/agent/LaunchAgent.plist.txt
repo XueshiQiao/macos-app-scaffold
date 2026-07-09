@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    Rename this file to {{HelperBundleID}}.plist before embedding.
+    Embedded path inside the app bundle:
+        Contents/Library/LaunchAgents/{{HelperBundleID}}.plist
+
+    Pass the same filename to SMAppService.agent(plistName:):
+        SMAppService.agent(plistName: "{{HelperBundleID}}.plist")
+
+    Keys:
+    - Label: must equal the filename without ".plist".
+    - BundleProgram: path to the helper executable, relative to the .app
+      bundle root (so for a macOS app, starts with "Contents/MacOS/...").
+    - MachServices: tells launchd to register a Mach service with this name.
+      Must match HelperConstants.machServiceName in Swift code.
+    - AssociatedBundleIdentifiers: lets the user identify which app owns
+      this agent in System Settings → Login Items & Extensions.
+    - RunAtLoad / KeepAlive are intentionally OMITTED so the helper starts
+      ON DEMAND (when the app first connects to its Mach service). Once
+      started, the helper stays resident until logout / explicit kill / OS
+      decides to recycle it — there is no idle-exit logic in the template.
+      Add an idle-exit timer in HelperMain.swift if you want the helper to
+      go away when not in use.
+
+    NOTE on ProcessType:
+        Omitted so launchd picks a sensible default. Set to "Background"
+        for low-priority workers, "Adaptive" to let launchd manage, or
+        "Interactive" only if the helper services user-facing UI events.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{HelperBundleID}}</string>
+
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/{{HelperExecutableName}}</string>
+
+    <key>MachServices</key>
+    <dict>
+        <key>{{HelperBundleID}}</key>
+        <true/>
+    </dict>
+
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>{{AppBundleID}}</string>
+    </array>
+</dict>
+</plist>
