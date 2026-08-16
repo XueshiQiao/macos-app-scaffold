@@ -1,0 +1,223 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Needed for creating releases
+permissions:
+  contents: write
+
+env:
+  APP_NAME: {{AppName}}
+  SCHEME: {{AppName}}
+  # Set to "true" if Apple secrets are configured
+  HAS_APPLE_SECRETS: ${{ secrets.MAC_CERTS_P12_BASE64 != '' }}
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.1'
+
+      - name: Install tools
+        run: |
+          brew install xcodegen create-dmg
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build universal binary
+        run: |
+          xcodebuild -project $APP_NAME.xcodeproj \
+            -scheme $SCHEME \
+            -configuration Release \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build \
+            SYMROOT=$(pwd)/build
+
+      # ---- Apple Developer Account required below ----
+      # If user has no Apple account, these steps are skipped via HAS_APPLE_SECRETS
+
+      - name: Import signing certificate
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          P12_BASE64: ${{ secrets.MAC_CERTS_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MAC_CERTS_P12_PASSWORD }}
+        run: |
+          if [[ -z "$P12_BASE64" || -z "$P12_PASSWORD" ]]; then
+            echo "::error::MAC_CERTS_P12_BASE64 and MAC_CERTS_P12_PASSWORD must both be set."
+            exit 1
+          fi
+
+          CERT_PATH="$RUNNER_TEMP/signing-cert.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          echo "$P12_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          # `codesign:` is included because the signing step below invokes
+          # codesign directly rather than going through xcodebuild, and the
+          # partition list is what decides which tools may use the key. A
+          # too-narrow list surfaces as codesign blocking on a GUI prompt no
+          # runner can answer. This is the superset a known-good pipeline uses.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          rm -f "$CERT_PATH"
+
+      - name: Code sign app
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY || 'Developer ID Application' }}
+        run: |
+          APP_PATH="build/Release/$APP_NAME.app"
+          ENTITLEMENTS="{{AppName}}/Resources/{{AppName}}.entitlements"
+
+          # Inside-out signing: sign embedded code deepest-first.
+          # Apple discourages --deep as it doesn't guarantee correct order.
+          if [ -d "$APP_PATH/Contents/Frameworks" ]; then
+            # 1. Sign every Mach-O binary individually
+            find "$APP_PATH/Contents/Frameworks" -type f | while read -r f; do
+              if file "$f" | grep -q "Mach-O"; then
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGNING_IDENTITY" "$f"
+              fi
+            done
+
+            # 2. Sign bundles inside-out: xpc -> app -> framework/dylib
+            find "$APP_PATH/Contents/Frameworks" -name "*.xpc" -type d | while read -r b; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$b"
+            done
+            find "$APP_PATH/Contents/Frameworks" -name "*.app" -type d | while read -r b; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$b"
+            done
+            find "$APP_PATH/Contents/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) | while read -r b; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$b"
+            done
+          fi
+
+          # Sign embedded background helper executables (SMAppService agents/daemons).
+          # The helper sits at Contents/MacOS/<helper> and the launchd plist sits at
+          # Contents/Library/Launch{Agents,Daemons}/<helper-bundle-id>.plist. We sign
+          # any non-main Mach-O in Contents/MacOS, with the helper's own entitlements
+          # if present.
+          if [ -d "$APP_PATH/Contents/MacOS" ]; then
+            MAIN_EXECUTABLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" \
+              "$APP_PATH/Contents/Info.plist") || {
+                echo "::error::Could not read CFBundleExecutable from $APP_PATH/Contents/Info.plist"
+                exit 1
+            }
+            for helper in "$APP_PATH/Contents/MacOS/"*; do
+              [ -f "$helper" ] || continue
+              base=$(basename "$helper")
+              [ "$base" = "$MAIN_EXECUTABLE" ] && continue
+              file "$helper" | grep -q "Mach-O" || continue
+
+              helper_ent="{{AppName}}/Helper/${base}.entitlements"
+              if [ -f "$helper_ent" ]; then
+                codesign --force --options runtime --timestamp \
+                  --entitlements "$helper_ent" \
+                  --sign "$SIGNING_IDENTITY" "$helper"
+              else
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGNING_IDENTITY" "$helper"
+              fi
+            done
+          fi
+
+          # Sign main app bundle with entitlements
+          codesign --force --options runtime --timestamp \
+            --entitlements "$ENTITLEMENTS" \
+            --sign "$SIGNING_IDENTITY" "$APP_PATH"
+
+          # Verify
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Notarize app
+        if: env.HAS_APPLE_SECRETS == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        run: |
+          if [[ -z "$APPLE_ID" || -z "$APP_PASSWORD" || -z "$TEAM_ID" ]]; then
+            echo "::error::Missing notarization secrets (APPLE_ID, APP_SPECIFIC_PASSWORD, or APPLE_TEAM_ID)"
+            exit 1
+          fi
+
+          ditto -c -k --keepParent "build/Release/$APP_NAME.app" "$RUNNER_TEMP/notarize.zip"
+
+          SUBMISSION_OUT=$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$TEAM_ID" \
+            --password "$APP_PASSWORD" \
+            --wait 2>&1) || true
+          echo "$SUBMISSION_OUT"
+
+          SUBMISSION_ID=$(echo "$SUBMISSION_OUT" | grep -m1 "^  id:" | awk '{print $NF}')
+          STATUS=$(echo "$SUBMISSION_OUT" | grep "^  status:" | awk '{print $NF}')
+
+          if [[ "$STATUS" != "Accepted" ]]; then
+            echo "--- Notarization Log ---"
+            if [[ -n "$SUBMISSION_ID" ]]; then
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
+                --password "$APP_PASSWORD" 2>&1 || true
+            fi
+            echo "::error::Notarization failed with status: $STATUS"
+            exit 1
+          fi
+
+          xcrun stapler staple "build/Release/$APP_NAME.app"
+          rm -f "$RUNNER_TEMP/notarize.zip"
+
+      - name: Create DMG
+        run: |
+          create-dmg \
+            --volname "$APP_NAME" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "$APP_NAME.app" 150 190 \
+            --hide-extension "$APP_NAME.app" \
+            --app-drop-link 450 190 \
+            "$APP_NAME.dmg" \
+            "build/Release/$APP_NAME.app" || true
+          # create-dmg exits 2 on "DMG created but icon layout failed" which is OK
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-dmg
+          path: ${{ env.APP_NAME }}.dmg
+
+      # ---- Release (tag-triggered only) ----
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.APP_NAME }}.dmg
+          generate_release_notes: true
+          # If multiple languages for release notes, the body can be templated
+          # body_path: RELEASE_NOTES.md
