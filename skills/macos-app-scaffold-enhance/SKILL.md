@@ -107,11 +107,47 @@ Before generating, ask:
 - Do you have an Apple Developer Account? (affects signing/notarization steps)
 - What Xcode version? (default: 16.1)
 
-Generate the workflow from the template in `/new-macos-app` skill, adapted to the existing project:
+**Do not write this workflow yourself.** Open
+`macos-app-scaffold-new/SKILL.md`, find the "CI/CD (GitHub Actions)" section,
+and adapt THAT file.
+
+This instruction exists because it was ignored once, with a real cost. The
+template already handles everything below; a workflow written from scratch —
+which looks perfectly reasonable, and passes on `main` — got the first three
+wrong and burned several release attempts before the cause was visible. Each of
+these fails LATE: after the build is green, on the first real tagged release,
+with an error message that points somewhere else.
+
+- **Build unsigned, then sign inside-out by hand.** Letting `xcodebuild` sign an
+  app that embeds Sparkle (or any framework carrying XPC services or a nested
+  helper `.app`) produces a bundle that signs cleanly and is then rejected by
+  Apple's notary service for the nested code. Sign every Mach-O, then `*.xpc`,
+  then `*.app`, then `*.framework`/`*.dylib`, and only then the outer bundle
+  with its entitlements — followed by `codesign --verify --deep --strict`.
+- **`notarytool submit --wait` exits 0 even when Apple REJECTS the submission.**
+  You must parse `status:` out of its output and fail on anything other than
+  `Accepted`, and dump `notarytool log <id>` when it isn't. Without this the run
+  continues to `stapler`, which fails with `Record not found` / `Error 65` —
+  an error that says nothing about the actual rejection reason and sends you
+  hunting in the wrong place.
+- **`permissions: contents: write` at workflow level.** The default
+  `GITHUB_TOKEN` is read-only; creating a release fails with 403
+  "Resource not accessible by integration".
+- **`codesign:` in the `set-key-partition-list` ACL**, since codesign (not
+  xcodebuild) is what uses the key.
+
+Then adapt to the existing project:
 - Read `project.yml` or project settings for app name, scheme name, entitlements path
 - Use existing bundle ID and version info
 - If no Apple account: unsigned build + DMG only
 - If Apple account: full pipeline (sign → notarize → staple)
+
+**Verify the result, don't assume it.** A workflow that goes green on `main`
+proves only that it compiles — the signing, notarization and release steps
+only run on a tag. Cut a real tag, then download the published artifact and
+check it: `spctl -a -vv <app>` should report `source=Notarized Developer ID`,
+`xcrun stapler validate <app>` should succeed, and `lipo -archs` should list
+both architectures.
 
 Also check if `.gitignore` needs updating for build artifacts.
 
