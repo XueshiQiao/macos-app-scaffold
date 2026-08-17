@@ -106,7 +106,8 @@ Present as a checklist. User can accept defaults or customize:
 | Screen Recording permission flow | **No** | For apps using ScreenCaptureKit (`SCShareableContent`, `SCStream`). Generates `ScreenRecordingPermission.swift` + a 3-state modal (`ScreenRecordingPromptView.swift`) that handles the **mandatory relaunch on first grant**. NOT a substitute for the Accessibility gate — first-grant semantics differ. |
 | Localization | **No** | If yes, ask which languages (always includes English). Generates `Localizable.xcstrings` or `.strings`. |
 | File-based logging | **Yes** | `~/Library/Logs/<AppName>.log` with lightweight FileLog class |
-| Settings/Preferences window | **Yes** | SwiftUI `Settings` scene scaffold |
+| Settings/Preferences window | **Yes** | Sidebar window the app owns — copy `templates/settings/`. **Never** a SwiftUI `Settings` scene: for a menu-bar app it opens *behind* other apps and cannot be fixed from outside. Read `templates/settings/README.md`. |
+| In-app interface-language picker | **No** | Only offer if Localization = Yes. Switches the app's own UI language without a relaunch. Costs: every string in the app must go through `L("…")`, and new strings must be added to the catalog by hand. See `templates/settings/README.md`. |
 | Analytics (Aptabase) | **No** | Privacy-respecting event tracking |
 | Onboarding/Welcome window | **No** | First-launch experience window |
 
@@ -205,15 +206,33 @@ Use this when the user picked **A** in Step 0. This is dramatically cheaper in t
    | Accessibility gate | Remove `AccessibilityChecker.swift` and references in `ContentView`/`OnboardingView`. |
    | Screen Recording permission | Remove `ScreenRecordingChecker.swift` (or `ScreenRecordingPermission.swift`) and any `SCShareableContent` / `SCStream` / `SCScreenshotManager` call sites. Drop the `import ScreenCaptureKit` line. |
    | File logging | Remove `FileLog.swift` and all call sites (replace with `os.Logger` only). |
-   | Localization | Remove `Localizable.xcstrings`, `InfoPlist.xcstrings`, `LocalizationManager.swift`. Strip `String(localized:)` calls back to bare strings. Remove `knownRegions` from `project.yml`. |
+   | Localization | Remove `Localizable.xcstrings`, `InfoPlist.xcstrings`, and `LocalizationOverride.swift` if present. Strip `String(localized:)` / `L("…")` calls back to bare strings. Remove `knownRegions` from `project.yml`. |
    | Launch at Login | Remove `LaunchAtLoginManager.swift` and toggle in Settings. |
-   | Settings window | Remove `SettingsView.swift` and `Settings { ... }` scene. |
+   | Settings window | Remove the settings sources and the `CommandGroup(replacing: .appSettings)` block from the app entry point. |
    | SwiftLint | Delete `.swiftlint.yml`. |
    | Unit tests | Delete `MacOSAppStarterTests/` and remove from `project.yml`. |
    | Homebrew Cask | Delete `Casks/`. |
    | CI/CD | Delete `.github/workflows/build.yml`. |
 
    For things the user opted *in* to that aren't in the template (e.g. App Sandbox, Background Helper, GRDB), fall back to the templates in `## File Templates` below — generate just those pieces.
+
+3b. **Replace the starter's Settings window (REQUIRED whenever the user kept a
+    settings window).** The `macos-app-starter` repo predates this template and
+    may still ship a SwiftUI `Settings { … }` scene. Leaving it in place ships
+    the activation bug: for a menu-bar app the settings window opens *behind*
+    other apps. Do this even though the clone "already has settings" —
+    especially then.
+
+    - Delete the starter's `SettingsView.swift` (and any `SettingsLink` call
+      sites in the menu-bar menu).
+    - Remove the `Settings { … }` scene from the app entry point.
+    - Copy `templates/settings/` in and wire it up as described under
+      **Settings window** in `## File Templates` below.
+
+    Grep to confirm nothing survived:
+    ```bash
+    grep -rn "Settings *{\|SettingsLink" <AppName>/Sources/   # must return nothing
+    ```
 
 4. **Regenerate the Xcode project** — `xcodegen generate`. Then build to verify nothing was broken by the rename: `xcodebuild -scheme <AppName> -destination 'platform=macOS' build`.
 
@@ -420,6 +439,15 @@ Generate these based on archetype. All files go in `{{AppName}}/Sources/`.
 
 #### App Entry Point: `{{AppName}}App.swift`
 
+> **No `Settings` scene in any archetype below — that is deliberate, not an
+> omission.** For an `LSUIElement` app the `Settings` scene opens the settings
+> window *behind* whatever the user is looking at, and nothing outside it can
+> fix that (full explanation in `templates/settings/README.md`). All three
+> archetypes therefore use the same owned window, so there is one code path to
+> maintain. Because dropping the scene also silently drops the application
+> menu's "Settings…" item and its ⌘, shortcut, every archetype restores it with
+> `CommandGroup(replacing: .appSettings)`.
+
 **Menu Bar only:**
 ```swift
 import SwiftUI
@@ -433,9 +461,11 @@ struct {{AppName}}App: App {
             MenuBarView()
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { SettingsWindowController.shared.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
@@ -453,9 +483,11 @@ struct {{AppName}}App: App {
         WindowGroup {
             ContentView()
         }
-
-        Settings {
-            SettingsView()
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { SettingsWindowController.shared.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
@@ -478,9 +510,11 @@ struct {{AppName}}App: App {
             MenuBarView()
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { SettingsWindowController.shared.show() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
@@ -549,42 +583,68 @@ struct MenuBarView: View {
 }
 ```
 
-#### SettingsView.swift (if settings window)
+#### Settings window (if settings window)
 
-```swift
-import SwiftUI
+**Copy the files, do not write your own.** The Settings window is a template,
+not a snippet to improvise — it encodes an activation bug that is easy to
+reintroduce and hard to notice.
 
-struct SettingsView: View {
-    var body: some View {
-        TabView {
-            GeneralSettingsView()
-                .tabItem {
-                    Label("General", systemImage: "gear")
-                }
-        }
-        .frame(width: 450, height: 300)
-    }
-}
+**Templates location.** `templates/settings/`.
+**Read `templates/settings/README.md` before copying.**
 
-struct GeneralSettingsView: View {
-    // If Launch at Login:
-    // @State private var launchAtLogin = false
+| Copy | To | When |
+|---|---|---|
+| `SettingsWindowController.swift` | `{{AppName}}/Sources/` | Always |
+| `SettingsStore.swift` | `{{AppName}}/Sources/` | Always |
+| `SettingsChrome.swift` | `{{AppName}}/Sources/` | Always |
+| `GeneralPage.swift` | `{{AppName}}/Sources/` | Always |
+| `AboutPage.swift` | `{{AppName}}/Sources/` | Always |
+| `LocalizationOverride.swift` | `{{AppName}}/Sources/` | Only if the in-app interface-language picker was selected |
 
-    var body: some View {
-        Form {
-            Text("Settings go here")
-            // If Launch at Login:
-            // Toggle("Launch at Login", isOn: $launchAtLogin)
-            //     .onChange(of: launchAtLogin) { _, newValue in
-            //         LaunchAtLoginManager.shared.setEnabled(newValue)
-            //     }
-        }
-        .padding()
-    }
-}
-```
+Then, in order — these are generation steps, not suggestions. Each copied file
+carries marked blocks to uncomment or delete; leaving them as-is ships a feature
+the user declined, or advertises one that isn't there.
+
+1. Replace `{{AppName}}` in every copied file.
+2. Confirm the app entry point has the `CommandGroup(replacing: .appSettings)`
+   block shown above, and **no** `Settings { … }` scene.
+3. Open it from the menu-bar menu with a plain button — **never** `SettingsLink`:
+   ```swift
+   Button("Settings…") { SettingsWindowController.shared.show() }
+   ```
+4. **If "Launch at Login" was NOT selected:** delete the marked `Section` in
+   `GeneralPage.swift` and the `launchAtLogin` property in `SettingsStore.swift`.
+   Both ship it unconditionally — leaving them registers a login item the user
+   declined.
+5. **If the in-app interface-language picker WAS selected:** uncomment the four
+   marked blocks — the picker `Section` in `GeneralPage.swift`, the
+   `interfaceLanguage` / `interfaceLanguageCodes` pass-throughs in
+   `SettingsStore.swift`, and **both** the `@ObservedObject` line and the
+   `.id(languageRevision.value)` line in `SettingsChrome.swift`. Then do the
+   rest of "Wiring it" in `templates/settings/README.md` — `applyStored()` in
+   `applicationWillFinishLaunching`, observing the revision on every other
+   surface, and converting strings to `L("…")`. Uncommenting only some of these
+   yields a picker that changes nothing.
+6. Point `SettingsStore.isOperational` / `statusText` at whatever can actually
+   block this app (a permission, a helper). If nothing can, delete the status
+   footer from `SettingsChrome.swift` rather than shipping a light that is
+   always green.
+7. Delete the `AboutPage` link rows the app does not have, and set its real URLs.
+8. Build. The templates compile as shipped, so an error here means a marked
+   block was half-uncommented.
+
+Do not flatten this into a `TabView`, and do not re-add a `Settings` scene "for
+the ⌘, shortcut" — step 2 already provides it.
 
 #### LaunchAtLoginManager.swift (if Launch at Login)
+
+> **Skip this file if you copied the Settings template** — `SettingsStore`
+> already implements launch-at-login against `SMAppService`, and `GeneralPage`
+> binds to it. Generating both leaves two owners of one setting, which is the
+> exact drift the template's README warns about. Generate this manager only when
+> there is no Settings window, or when something outside Settings also needs to
+> toggle it — in which case make `SettingsStore.launchAtLogin` forward to the
+> manager rather than calling `SMAppService` itself.
 
 ```swift
 import ServiceManagement
@@ -841,225 +901,15 @@ excluded:
 
 Generate based on CI/CD choices. The workflow has conditional blocks.
 
-```yaml
-name: Build & Release
+**Copy `templates/ci/build.yml`** to `.github/workflows/build.yml` and
+substitute the placeholders. Do not retype it, and do not write your own from
+memory — this file encodes several failures that only surface on a real tagged
+release, listed in `templates/ci/README.md`.
 
-on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-# Needed for creating releases
-permissions:
-  contents: write
-
-env:
-  APP_NAME: {{AppName}}
-  SCHEME: {{AppName}}
-  # Set to "true" if Apple secrets are configured
-  HAS_APPLE_SECRETS: ${{"{{"}} secrets.MAC_CERTS_P12_BASE64 != '' {{"}}"}}
-
-jobs:
-  build:
-    runs-on: macos-14
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '16.1'
-
-      - name: Install tools
-        run: |
-          brew install xcodegen create-dmg
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Build universal binary
-        run: |
-          xcodebuild -project $APP_NAME.xcodeproj \
-            -scheme $SCHEME \
-            -configuration Release \
-            ARCHS="arm64 x86_64" \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            build \
-            SYMROOT=$(pwd)/build
-
-      # ---- Apple Developer Account required below ----
-      # If user has no Apple account, these steps are skipped via HAS_APPLE_SECRETS
-
-      - name: Import signing certificate
-        if: env.HAS_APPLE_SECRETS == 'true'
-        env:
-          P12_BASE64: ${{"{{"}} secrets.MAC_CERTS_P12_BASE64 {{"}}"}}
-          P12_PASSWORD: ${{"{{"}} secrets.MAC_CERTS_P12_PASSWORD {{"}}"}}
-        run: |
-          if [[ -z "$P12_BASE64" || -z "$P12_PASSWORD" ]]; then
-            echo "::error::MAC_CERTS_P12_BASE64 and MAC_CERTS_P12_PASSWORD must both be set."
-            exit 1
-          fi
-
-          CERT_PATH="$RUNNER_TEMP/signing-cert.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          KEYCHAIN_PASSWORD=$(uuidgen)
-
-          echo "$P12_BASE64" | base64 --decode > "$CERT_PATH"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-          rm -f "$CERT_PATH"
-
-      - name: Code sign app
-        if: env.HAS_APPLE_SECRETS == 'true'
-        env:
-          SIGNING_IDENTITY: ${{"{{"}} secrets.SIGNING_IDENTITY || 'Developer ID Application' {{"}}"}}
-        run: |
-          APP_PATH="build/Release/$APP_NAME.app"
-          ENTITLEMENTS="{{AppName}}/Resources/{{AppName}}.entitlements"
-
-          # Inside-out signing: sign embedded code deepest-first.
-          # Apple discourages --deep as it doesn't guarantee correct order.
-          if [ -d "$APP_PATH/Contents/Frameworks" ]; then
-            # 1. Sign every Mach-O binary individually
-            find "$APP_PATH/Contents/Frameworks" -type f | while read -r f; do
-              if file "$f" | grep -q "Mach-O"; then
-                codesign --force --options runtime --timestamp \
-                  --sign "$SIGNING_IDENTITY" "$f"
-              fi
-            done
-
-            # 2. Sign bundles inside-out: xpc -> app -> framework/dylib
-            find "$APP_PATH/Contents/Frameworks" -name "*.xpc" -type d | while read -r b; do
-              codesign --force --options runtime --timestamp \
-                --sign "$SIGNING_IDENTITY" "$b"
-            done
-            find "$APP_PATH/Contents/Frameworks" -name "*.app" -type d | while read -r b; do
-              codesign --force --options runtime --timestamp \
-                --sign "$SIGNING_IDENTITY" "$b"
-            done
-            find "$APP_PATH/Contents/Frameworks" \( -name "*.framework" -o -name "*.dylib" \) | while read -r b; do
-              codesign --force --options runtime --timestamp \
-                --sign "$SIGNING_IDENTITY" "$b"
-            done
-          fi
-
-          # Sign embedded background helper executables (SMAppService agents/daemons).
-          # The helper sits at Contents/MacOS/<helper> and the launchd plist sits at
-          # Contents/Library/Launch{Agents,Daemons}/<helper-bundle-id>.plist. We sign
-          # any non-main Mach-O in Contents/MacOS, with the helper's own entitlements
-          # if present.
-          if [ -d "$APP_PATH/Contents/MacOS" ]; then
-            MAIN_EXECUTABLE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" \
-              "$APP_PATH/Contents/Info.plist") || {
-                echo "::error::Could not read CFBundleExecutable from $APP_PATH/Contents/Info.plist"
-                exit 1
-            }
-            for helper in "$APP_PATH/Contents/MacOS/"*; do
-              [ -f "$helper" ] || continue
-              base=$(basename "$helper")
-              [ "$base" = "$MAIN_EXECUTABLE" ] && continue
-              file "$helper" | grep -q "Mach-O" || continue
-
-              helper_ent="{{AppName}}/Helper/${base}.entitlements"
-              if [ -f "$helper_ent" ]; then
-                codesign --force --options runtime --timestamp \
-                  --entitlements "$helper_ent" \
-                  --sign "$SIGNING_IDENTITY" "$helper"
-              else
-                codesign --force --options runtime --timestamp \
-                  --sign "$SIGNING_IDENTITY" "$helper"
-              fi
-            done
-          fi
-
-          # Sign main app bundle with entitlements
-          codesign --force --options runtime --timestamp \
-            --entitlements "$ENTITLEMENTS" \
-            --sign "$SIGNING_IDENTITY" "$APP_PATH"
-
-          # Verify
-          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-
-      - name: Notarize app
-        if: env.HAS_APPLE_SECRETS == 'true'
-        env:
-          APPLE_ID: ${{"{{"}} secrets.APPLE_ID {{"}}"}}
-          TEAM_ID: ${{"{{"}} secrets.APPLE_TEAM_ID {{"}}"}}
-          APP_PASSWORD: ${{"{{"}} secrets.APP_SPECIFIC_PASSWORD {{"}}"}}
-        run: |
-          if [[ -z "$APPLE_ID" || -z "$APP_PASSWORD" || -z "$TEAM_ID" ]]; then
-            echo "::error::Missing notarization secrets (APPLE_ID, APP_SPECIFIC_PASSWORD, or APPLE_TEAM_ID)"
-            exit 1
-          fi
-
-          ditto -c -k --keepParent "build/Release/$APP_NAME.app" "$RUNNER_TEMP/notarize.zip"
-
-          SUBMISSION_OUT=$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$TEAM_ID" \
-            --password "$APP_PASSWORD" \
-            --wait 2>&1) || true
-          echo "$SUBMISSION_OUT"
-
-          SUBMISSION_ID=$(echo "$SUBMISSION_OUT" | grep -m1 "^  id:" | awk '{print $NF}')
-          STATUS=$(echo "$SUBMISSION_OUT" | grep "^  status:" | awk '{print $NF}')
-
-          if [[ "$STATUS" != "Accepted" ]]; then
-            echo "--- Notarization Log ---"
-            if [[ -n "$SUBMISSION_ID" ]]; then
-              xcrun notarytool log "$SUBMISSION_ID" \
-                --apple-id "$APPLE_ID" --team-id "$TEAM_ID" \
-                --password "$APP_PASSWORD" 2>&1 || true
-            fi
-            echo "::error::Notarization failed with status: $STATUS"
-            exit 1
-          fi
-
-          xcrun stapler staple "build/Release/$APP_NAME.app"
-          rm -f "$RUNNER_TEMP/notarize.zip"
-
-      - name: Create DMG
-        run: |
-          create-dmg \
-            --volname "$APP_NAME" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --icon "$APP_NAME.app" 150 190 \
-            --hide-extension "$APP_NAME.app" \
-            --app-drop-link 450 190 \
-            "$APP_NAME.dmg" \
-            "build/Release/$APP_NAME.app" || true
-          # create-dmg exits 2 on "DMG created but icon layout failed" which is OK
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{"{{"}} env.APP_NAME {{"}}"}}-dmg
-          path: ${{"{{"}} env.APP_NAME {{"}}"}}.dmg
-
-      # ---- Release (tag-triggered only) ----
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{"{{"}} env.APP_NAME {{"}}"}}.dmg
-          generate_release_notes: true
-          # If multiple languages for release notes, the body can be templated
-          # body_path: RELEASE_NOTES.md
+```bash
+mkdir -p .github/workflows
+cp <skill-dir>/templates/ci/build.yml .github/workflows/build.yml
+# then replace {{AppName}} / {{SchemeName}} / {{BundleID}} / {{EntitlementsPath}}
 ```
 
 If the user does NOT have an Apple Developer Account, remove all steps that have `if: env.HAS_APPLE_SECRETS == 'true'` and the `HAS_APPLE_SECRETS` env var. Keep only: checkout, setup, build, create DMG (unsigned), upload artifact, and release.
@@ -1460,10 +1310,17 @@ File: `{{AppName}}/Sources/WelcomeView.swift`
 import SwiftUI
 
 struct WelcomeView: View {
-    @Environment(\.dismiss) private var dismiss
+    /// Handed in by whoever created the window. `@Environment(\.dismiss)` does
+    /// NOTHING inside a plain `NSHostingView` in an AppKit `NSWindow`, so a
+    /// "Get Started" button wired to it sets the flag and leaves the window
+    /// sitting there. Take the close action as a parameter instead.
+    let onFinish: () -> Void
 
     var body: some View {
         VStack(spacing: 24) {
+            // If the Settings window template is also present, use its
+            // `HeroTile(symbol:color:)` and `.auroraBackground()` here so the
+            // first thing a user sees matches the place they come back to.
             Image(systemName: "app.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(.tint)
@@ -1478,8 +1335,8 @@ struct WelcomeView: View {
                 .multilineTextAlignment(.center)
 
             Button("Get Started") {
-                UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-                dismiss()
+                OnboardingState.markSeen()
+                onFinish()
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
@@ -1488,9 +1345,46 @@ struct WelcomeView: View {
         .frame(width: 480, height: 360)
     }
 }
+
+/// Stored as the app VERSION that completed onboarding, not a bare bool, so a
+/// later release can re-introduce itself when it changes something the user
+/// needs to know about — without re-showing this one to everybody.
+enum OnboardingState {
+    private static let key = "onboardingCompletedVersion"
+    private static var current: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+    }
+    static var shouldShow: Bool { UserDefaults.standard.string(forKey: key) == nil }
+    static func markSeen() { UserDefaults.standard.set(current, forKey: key) }
+    /// To test the flow again: `defaults delete <BundleID> onboardingCompletedVersion`
+    static func reset() { UserDefaults.standard.removeObject(forKey: key) }
+}
 ```
 
-Add to AppDelegate: check `UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")` and show welcome window if false.
+Present it from `AppDelegate` when `OnboardingState.shouldShow`. Two things this
+window must do, both of which are silently wrong if you skip them:
+
+```swift
+private var welcomeWindow: NSWindow?
+
+private func showWelcome() {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 360),
+                          styleMask: [.titled, .closable, .fullSizeContentView],
+                          backing: .buffered, defer: false)
+    window.center()
+    window.isReleasedWhenClosed = false
+    window.contentView = NSHostingView(rootView: WelcomeView { [weak self] in
+        self?.welcomeWindow?.close()
+        self?.welcomeWindow = nil     // isReleasedWhenClosed is false — this frees it
+    })
+    welcomeWindow = window
+
+    // A menu-bar app is NOT frontmost at launch. Without activating first the
+    // window opens behind everything and the user never sees it.
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+}
+```
 
 ### Localization (if selected)
 
@@ -1570,42 +1464,35 @@ let n = String(localized: "\(count) items")         // interpolation works
 // Avoid: bare String literals shown in UI without going through String(localized:)
 ```
 
-**5. Runtime language switch (optional but common UX).** macOS apps inherit system language by default; many users want an in-app language picker. Provide a helper:
+**5. Runtime language switch (optional).** Only if the user selected the
+**in-app interface-language picker** in Step 3. Pick exactly ONE of these two
+modes for the whole app — they are mutually exclusive, and running both leaves
+two independent preferences plus a picker that appears to work and does not:
 
-```swift
-// {{AppName}}/Sources/LocalizationManager.swift
-import Foundation
-import SwiftUI
+| Mode | Mechanism | Write UI strings as | Switches |
+|---|---|---|---|
+| **Follow the system** (default) | nothing — macOS resolves it | `String(localized:)` or bare `Text("…")` | with the system, at launch |
+| **Instant in-app switch** | `templates/settings/LocalizationOverride.swift` only | `L("…")` | immediately, no relaunch |
 
-@MainActor
-final class LocalizationManager: ObservableObject {
-    static let shared = LocalizationManager()
+> **Do not write an `AppleLanguages` switcher.** Setting
+> `UserDefaults.standard.set([code], forKey: "AppleLanguages")` cannot switch a
+> running app: `Bundle.main` has already resolved its localization, and
+> rebuilding the SwiftUI tree does not change that — it only takes effect on the
+> next launch. An earlier version of this skill shipped exactly that helper and
+> claimed `.id(...)` made it instant. It does not.
 
-    @AppStorage("app.language") var languageCode: String = "" {
-        didSet { applyLanguage() }
-    }
-
-    private init() { applyLanguage() }
-
-    private func applyLanguage() {
-        // Empty string = follow system. Non-empty = override via AppleLanguages.
-        if languageCode.isEmpty {
-            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
-        } else {
-            UserDefaults.standard.set([languageCode], forKey: "AppleLanguages")
-        }
-        // Note: system-resolved Bundle.main strings only update on next launch.
-        // For instant switching, observe `objectWillChange` and key SwiftUI views by `languageCode`.
-        objectWillChange.send()
-    }
-}
-```
-
-Then key the root view by `localizationManager.languageCode` (`.id(...)` in SwiftUI) so the view tree rebuilds on switch — strings re-resolve through `String(localized:)`'s lookup chain.
+For the instant mode, follow the **five** wiring steps in
+`templates/settings/README.md` ("Wiring it"). Copying the file is only step 1;
+skipping any of the others produces a feature that is advertised and absent, or
+a picker that changes nothing.
 
 **6. AGENTS.md convention** — add this so future code stays localizable:
 
 > All UI strings must go through `String(localized:)` (or SwiftUI implicit `Text("...")`). Never use bare `String` literals for text shown to users. New strings appear automatically in `Localizable.xcstrings` after build; translate non-English entries before merging.
+
+If the app uses the **instant in-app switch** mode instead, write that convention as:
+
+> All UI strings must go through `L("...")`. Never use a bare SwiftUI literal, `Text("...")` or `String(localized:)` for user-facing text — neither routes through the language override, so those strings silently keep rendering in the system language. Because `L`'s argument is a variable, Xcode cannot auto-extract them: add every new string to `Localizable.xcstrings` by hand, in all shipped languages.
 
 **7. Release notes** — when multiple languages are configured, the release notes template (see "Release Notes Languages" above) should have a section per language so changelog text matches what Sparkle (or the user) shows.
 

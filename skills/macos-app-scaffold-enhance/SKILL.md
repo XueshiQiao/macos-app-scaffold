@@ -150,7 +150,7 @@ Ask: Which approach?
 For GitHub API polling:
 - Ask for GitHub owner/repo (or detect from `git remote`)
 - Generate `UpdateChecker.swift` (see new-macos-app templates)
-- Show how to integrate in SettingsView or AppDelegate
+- Show how to integrate in the Settings window's About page (or AppDelegate)
 
 For Sparkle:
 - Add `Sparkle` (v2.9.0+) to `project.yml` packages section
@@ -250,10 +250,12 @@ Generate sensible defaults (see new-macos-app template). Ask if they want strict
 ### Feature: Launch at Login
 
 **Adds:** `LaunchAtLoginManager.swift`
-**Modifies:** Existing SettingsView (if found) to add toggle.
+**Modifies:** the Settings window's General page (if present) to add the toggle.
 
 - Uses `SMAppService` (macOS 13+)
-- If SettingsView exists, offer to add the toggle there
+- If a Settings window exists, offer to add the toggle to its General page.
+  If the project still has an old flat `SettingsView.swift`, offer to migrate it
+  to the sidebar template first — see **Feature: Settings/Preferences Window**
 
 ### Feature: Background Helper (User Agent or Privileged Daemon)
 
@@ -290,7 +292,7 @@ operation needs root?"* — if they cannot name one, steer them to agent.
   dependency of the main app with `copy.destination: executables`
 - `.github/workflows/build.yml` — extends the codesign loop to sign
   `Contents/MacOS/<helper>` with `<helper>.entitlements` if present
-- Optionally, the existing SettingsView — adds a toggle bound to
+- Optionally, the Settings window's General page — adds a toggle bound to
   `HelperManager.shared`
 
 **Templates location.** The agent and daemon templates ship with the
@@ -378,10 +380,20 @@ is on the App Store path.
 
 ### Feature: Localization
 
-**Adds:** `Localizable.xcstrings` (and `InfoPlist.xcstrings` for display name), plus `LocalizationManager.swift` for runtime language switch.
+**Adds:** `Localizable.xcstrings` (and `InfoPlist.xcstrings` for display name). Optionally, for an instant in-app language switch, `LocalizationOverride.swift` from `../macos-app-scaffold-new/templates/settings/`.
 **Modifies:** `project.yml` to add `Resources/` path, `LOCALIZATION_PREFERS_STRING_CATALOGS: YES`, `SWIFT_EMIT_LOC_STRINGS: YES`, `DEVELOPMENT_LANGUAGE`, and `knownRegions` (must include all selected languages plus `Base`). `AGENTS.md` to add the "no bare UI string literals" convention.
 
-See `macos-app-scaffold-new/SKILL.md` "Localization (if selected)" section for the full template — same xcstrings JSON shape, same project.yml settings, same `LocalizationManager` helper, same AGENTS.md text. Follow the same approach when enhancing.
+See `macos-app-scaffold-new/SKILL.md` "Localization (if selected)" section for the full template — same xcstrings JSON shape, same project.yml settings, same AGENTS.md text. Follow the same approach when enhancing.
+
+**Pick one language mode, never both.** Either the app follows the system
+(strings written as `String(localized:)` or bare `Text("…")`), or it offers an
+instant in-app switch (`LocalizationOverride.swift` only, strings written as
+`L("…")`). Do **not** write an `AppleLanguages` switcher: `Bundle.main` has
+already resolved its localization in a running process, so that only takes
+effect at the next launch no matter how the view tree is rebuilt. For the
+instant mode, follow all five steps under "Wiring it" in
+`../macos-app-scaffold-new/templates/settings/README.md` — copying the file is
+only the first.
 
 Ask: Which languages? (always includes English)
 
@@ -391,11 +403,50 @@ Ask: Which languages? (always includes English)
 
 ### Feature: Settings/Preferences Window
 
-**Adds:** `SettingsView.swift`
-**Modifies:** App entry point to add `Settings` scene.
+**Adds:** the files in `templates/settings/`.
+**Modifies:** app entry point — adds `CommandGroup(replacing: .appSettings)`, and
+**removes any existing `Settings { … }` scene**.
 
-- Read existing app entry point to determine where to add the Settings scene
-- Generate a tabbed SettingsView scaffold
+**Templates location.** `../macos-app-scaffold-new/templates/settings/`
+(repo path: `skills/macos-app-scaffold-new/templates/settings/`).
+**Read its `README.md` before copying.** Copy the files; do not improvise a
+settings window.
+
+> **Never add a SwiftUI `Settings` scene, and remove one if you find it.** For a
+> menu-bar app (`LSUIElement: true`) it opens the settings window *behind*
+> whatever the user is looking at — the app is never frontmost when its
+> menu-bar icon is clicked, and `SettingsLink` orders the window in without
+> activating the app. There is no hook on the `Settings` scene to fix it.
+
+Steps:
+
+1. Copy `SettingsWindowController.swift`, `SettingsStore.swift`,
+   `SettingsChrome.swift`, `GeneralPage.swift`, `AboutPage.swift` into the app's
+   `Sources/`. Replace `{{AppName}}`.
+2. In the app entry point, delete any `Settings { … }` scene and add:
+   ```swift
+   .commands {
+       CommandGroup(replacing: .appSettings) {
+           Button("Settings…") { SettingsWindowController.shared.show() }
+               .keyboardShortcut(",", modifiers: .command)
+       }
+   }
+   ```
+   This is not optional: dropping the `Settings` scene silently removes the
+   application menu's "Settings…" item and its ⌘, shortcut.
+3. Open it from the menu-bar menu with `Button("Settings…") { SettingsWindowController.shared.show() }` — replace any `SettingsLink`.
+4. **Migrate, don't discard.** If the project already has a settings view, move
+   each existing control into `GeneralPage` (or a new page) rather than dropping
+   it. Bindings that read through an existing manager or engine should keep doing
+   so — see "own it, or forward it" in the template README; do **not** mirror
+   their values into `SettingsStore`.
+5. Point `SettingsStore.isOperational` / `statusText` at whatever can actually
+   block this app, or delete the status footer.
+
+Confirm nothing survived:
+```bash
+grep -rn "Settings *{\|SettingsLink" Sources/    # must return nothing
+```
 
 ### Feature: Analytics (Aptabase)
 
@@ -411,8 +462,32 @@ Ask: Which languages? (always includes English)
 **Adds:** `WelcomeView.swift` + window management code.
 
 - Generate SwiftUI welcome view
-- Add `UserDefaults` check for first launch
+- Add `UserDefaults` check for first launch (store the app VERSION that completed
+  it, not a bare bool — a later release can then re-introduce itself without
+  re-showing this one to everybody)
 - Show how to present it from AppDelegate
+
+Two traps, both of which produce a window that looks fine and does nothing:
+
+- **Activate before ordering front.** A menu-bar app is not frontmost at launch,
+  so an unactivated window opens behind everything:
+  ```swift
+  NSApp.activate(ignoringOtherApps: true)
+  window.makeKeyAndOrderFront(nil)
+  ```
+- **`@Environment(\.dismiss)` does not work here.** Inside a plain
+  `NSHostingView` in an AppKit `NSWindow` it is a no-op, so a "Done" button
+  wired to it silently fails. Pass an explicit close callback into the view:
+  ```swift
+  window.contentView = NSHostingView(rootView: WelcomeView { [weak self] in
+      self?.welcomeWindow?.close()
+      self?.welcomeWindow = nil     // isReleasedWhenClosed is false — this frees it
+  })
+  ```
+
+If the Settings window template is also present, reuse its `HeroTile` and
+`auroraBackground()` so the first thing a user sees and the place they come back
+to look like the same app.
 
 ### Feature: Homebrew Cask
 
